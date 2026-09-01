@@ -1,0 +1,32 @@
+# Binaries
+/bin/
+/dist/
+/llmform
+
+# Diagram sources and exports — kept local, not part of the repo.
+# Regenerate PNGs with docs/diagrams/render.sh if you restore DIAGRAMS.md.
+/docs/DIAGRAMS.md
+/docs/diagrams/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+*.egg-info/
+.coverage
+coverage.xml
+htmlcov/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# Secrets
+.env
+.env.*

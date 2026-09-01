@@ -1,0 +1,54 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "llmform"
+version = "0.1.0.dev0"
+description = "Policy-enforced declarative LLM applications"
+readme = "docs/SPEC.md"
+requires-python = ">=3.12"
+dependencies = [
+  "jsonschema>=4.23",
+  "pydantic>=2.10",
+  "PyYAML>=6.0.2",
+  "typer>=0.15",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3", "pytest-cov>=6.0", "ruff>=0.9"]
+
+[project.scripts]
+llmform = "llmform.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/llmform"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = [
+  "--cov=llmform",
+  "--cov-report=term-missing:skip-covered",
+  "--cov-fail-under=80",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["llmform"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_also = [
+  "if TYPE_CHECKING:",
+  "if __name__ == .__main__.:",
+  "raise NotImplementedError",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
