@@ -133,6 +133,17 @@ def test_init_creates_a_valid_locked_project(tmp_path: Path) -> None:
     assert validation.exit_code == 0, validation.output
 
 
+def test_fmt_is_idempotent_on_initialized_project(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    assert runner.invoke(app, ["init", str(project)]).exit_code == 0
+
+    first = runner.invoke(app, ["fmt", str(project)])
+    second = runner.invoke(app, ["fmt", str(project)])
+
+    assert first.exit_code == second.exit_code == 0
+    assert first.output == second.output == "Formatted 0 file(s)\n"
+
+
 def test_validate_scrubs_secrets_from_human_and_json_diagnostics(
     tmp_path: Path, monkeypatch
 ) -> None:

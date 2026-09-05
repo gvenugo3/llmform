@@ -13,6 +13,7 @@ dependencies = [
   "jsonschema>=4.23",
   "pydantic>=2.10",
   "PyYAML>=6.0.2",
+  "ruamel.yaml>=0.18,<0.19",
   "typer>=0.15",
 ]
 

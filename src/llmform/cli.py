@@ -6,6 +6,8 @@ from typing import Annotated
 import typer
 
 from llmform import __version__
+from llmform.config.discovery import discover_files, find_project_root
+from llmform.config.format import format_file
 from llmform.config.interpolation import SecretScrubber, resolve_interpolations
 from llmform.config.loader import attach_model_positions, load_project
 from llmform.config.models import ProjectConfig
@@ -97,6 +99,19 @@ def init(
         raise typer.Exit(1)
     write_lock(document)
     typer.echo(f"Initialized {root}")
+
+
+@app.command()
+def fmt(
+    path: Annotated[Path | None, typer.Argument(help="Project file or directory")] = None,
+) -> None:
+    """Canonicalize project YAML while preserving comments."""
+
+    root = find_project_root(path or Path.cwd())
+    if root is None:
+        raise typer.BadParameter("no llmform configuration found")
+    changed = sum(format_file(file) for file in discover_files(root))
+    typer.echo(f"Formatted {changed} file(s)")
 
 
 @app.command()
