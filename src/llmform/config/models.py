@@ -1,19 +1,62 @@
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+from dataclasses import dataclass
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationInfo, field_validator
+
+from llmform.diagnostics import Position
+
+Scalar = str | int | float | bool
+
+
+@dataclass(frozen=True)
+class FieldLocation:
+    key: Position
+    value: Position
 
 
 class StrictModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True, validate_default=True)
+
+    _field_locations: dict[str, FieldLocation] = PrivateAttr(default_factory=dict)
+
+    def field_location(self, name: str) -> FieldLocation | None:
+        """Return the declaration locations attached by the positioned loader."""
+
+        return self._field_locations.get(name)
+
+    def field_position(self, name: str, *, key: bool = False) -> Position | None:
+        location = self.field_location(name)
+        if location is None:
+            return None
+        return location.key if key else location.value
+
+    def _set_field_location(self, name: str, location: FieldLocation) -> None:
+        self._field_locations[name] = location
 
 
 class Variable(StrictModel):
     type: Literal["string", "integer", "number", "boolean"] = "string"
-    default: Any = None
+    default: Scalar | None = None
     description: str | None = None
     required: bool = False
+
+    @field_validator("default")
+    @classmethod
+    def validate_default_type(cls, value: Scalar | None, info: ValidationInfo) -> Scalar | None:
+        if value is None:
+            return value
+        declared_type = info.data.get("type", "string")
+        valid = {
+            "string": type(value) is str,
+            "integer": type(value) is int,
+            "number": type(value) in {int, float},
+            "boolean": type(value) is bool,
+        }[declared_type]
+        if not valid:
+            raise ValueError(f"default must have declared type {declared_type}")
+        return value
 
 
 class Provider(StrictModel):

@@ -7,7 +7,7 @@ import typer
 
 from llmform import __version__
 from llmform.config.interpolation import resolve_interpolations
-from llmform.config.loader import load_project
+from llmform.config.loader import attach_model_positions, load_project
 from llmform.config.models import ProjectConfig
 from llmform.config.semantic import validate_semantics
 from llmform.config.validate import validate_references
@@ -53,6 +53,7 @@ def validate(
         if not interpolation_diagnostics:
             try:
                 document.config = ProjectConfig.model_validate(resolved)
+                attach_model_positions(document.config, document)
             except Exception as exc:  # pragma: no cover - interpolation type errors are unusual
                 typer.echo(scrubber.scrub(str(exc)), err=True)
                 raise typer.Exit(1) from None

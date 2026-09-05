@@ -10,7 +10,7 @@ from pydantic import ValidationError
 from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
 
 from llmform.config.discovery import discover_files, find_project_root
-from llmform.config.models import ProjectConfig
+from llmform.config.models import FieldLocation, ProjectConfig, StrictModel
 from llmform.diagnostics import Diagnostic, Position, Severity
 
 PathKey = tuple[str | int, ...]
@@ -72,6 +72,36 @@ class ConfigDocument:
         if path in self.key_positions:
             return self.key_positions[path]
         return self.position(path)
+
+
+def _attach_model_positions(
+    value: object,
+    path: PathKey,
+    positions: dict[PathKey, Position],
+    key_positions: dict[PathKey, Position],
+) -> None:
+    if isinstance(value, StrictModel):
+        for name in type(value).model_fields:
+            field_path = path + (name,)
+            value_position = positions.get(field_path)
+            if value_position is not None:
+                value._set_field_location(
+                    name,
+                    FieldLocation(key_positions.get(field_path, value_position), value_position),
+                )
+            _attach_model_positions(getattr(value, name), field_path, positions, key_positions)
+    elif isinstance(value, dict):
+        for name, item in value.items():
+            _attach_model_positions(item, path + (name,), positions, key_positions)
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            _attach_model_positions(item, path + (index,), positions, key_positions)
+
+
+def attach_model_positions(config: ProjectConfig, document: ConfigDocument) -> None:
+    """Attach a document's source map to a freshly validated typed model tree."""
+
+    _attach_model_positions(config, (), document.positions, document.key_positions)
 
 
 def _scalar_key(node: Node) -> str:
@@ -293,7 +323,7 @@ def load_project(start: Path) -> ConfigDocument:
                         position or positions.get(path[:-1], Position(files[0])),
                     )
                 )
-    return ConfigDocument(
+    document = ConfigDocument(
         root,
         files,
         sources,
@@ -303,3 +333,6 @@ def load_project(start: Path) -> ConfigDocument:
         config,
         diagnostics,
     )
+    if config is not None:
+        attach_model_positions(config, document)
+    return document
