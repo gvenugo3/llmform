@@ -768,7 +768,7 @@ src/llmform/
   cli.py                Typer command entrypoint
   diagnostics.py        positioned diagnostics and renderers
   types.py              Principal, Message, RunState, Verdict, approval state
-  config/               discovery, YAML, typed AST, interpolation, L0–L2
+  config/               discovery, YAML, typed AST, interpolation, graph, L0–L2
   schemas/              packaged Draft 2020-12 configuration schemas
   policy/cel/           schema types, hook environments, parser and type-checker
 tests/                  unit and golden diagnostic fixtures
@@ -779,7 +779,6 @@ Planned v0.1 additions:
 
 ```
 src/llmform/
-  graph/                DAG, cycles, topo order
   policy/
     engine/             hook dispatch, verdicts, transform staging
     transform/          redact, tokenize
