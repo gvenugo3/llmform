@@ -61,8 +61,8 @@ def test_undefined_field_has_exact_yaml_column_and_suggestion(tmp_path) -> None:
     ]
     assert finding.position.column == source_line.index("amount") + 1
     assert finding.message == "undefined field 'amount'"
-    assert "schema: input.json" in (finding.hint or "")
-    assert "did you mean 'amount_cents'?" in (finding.hint or "")
+    assert "schema: input.json" in (finding.context or "")
+    assert finding.suggestion == "amount_cents"
 
 
 def test_validate_cli_renders_exit_criterion(tmp_path) -> None:

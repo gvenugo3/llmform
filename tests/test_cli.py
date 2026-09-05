@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -20,6 +21,21 @@ def test_validate_command_fails_for_unknown_field(tmp_path: Path) -> None:
     result = runner.invoke(app, ["validate", str(tmp_path)])
     assert result.exit_code == 1
     assert "LLMF100" in result.output
+
+
+def test_validate_json_uses_structured_diagnostic_envelope(tmp_path: Path) -> None:
+    (tmp_path / "llmform.yaml").write_text("mdoels: {}\n", encoding="utf-8")
+    result = runner.invoke(app, ["validate", str(tmp_path), "--json"])
+    payload = json.loads(result.output)
+    assert result.exit_code == 1
+    assert payload["diagnostics"][0]["code"] == "LLMF100"
+    assert payload["summary"] == {
+        "errors": 1,
+        "warnings": 0,
+        "total": 1,
+        "shown": 1,
+        "omitted": 0,
+    }
 
 
 def test_validate_command_rejects_unsupported_policy_schema(tmp_path: Path) -> None:

@@ -1,0 +1,7 @@
+a.llmform.yaml:3:17: error [LLMF411]: undefined field 'amount'
+  on tool.issue_refund (schema: refund_input.json)
+  hint: field is checked against refund_input.json
+  did you mean 'amount_cents'?
+b.llmform.yaml:9:5: warning [LLMF507]: detokenization targets a write operation
+  hint: re-substitution may disclose a value
+Summary: 1 error, 1 warning

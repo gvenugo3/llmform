@@ -306,9 +306,14 @@ class ExpressionTypeChecker:
     ) -> None:
         line = (token.line if token is not None else node.meta.line) or 1
         column = (token.column if token is not None else node.meta.column) or 1
-        hint = f"did you mean {suggestion!r}?" if suggestion else None
         self.diagnostics.append(
-            Diagnostic(code, Severity.ERROR, message, self._position(line, column), hint)
+            Diagnostic(
+                code,
+                Severity.ERROR,
+                message,
+                self._position(line, column),
+                suggestion=suggestion,
+            )
         )
 
 
@@ -487,16 +492,15 @@ def validate_policy_rules(document: object) -> list[Diagnostic]:
                         context = f"on tool.{tool_name}"
                         if schema:
                             context += f" (schema: {Path(schema).name})"
-                    hint = context
-                    if diagnostic.hint:
-                        hint += f"\n  {diagnostic.hint}"
                     diagnostics.append(
                         Diagnostic(
                             diagnostic.code,
                             diagnostic.severity,
                             diagnostic.message,
                             diagnostic.position,
-                            hint,
+                            diagnostic.hint,
+                            diagnostic.suggestion,
+                            context,
                         )
                     )
     return diagnostics

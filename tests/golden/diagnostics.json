@@ -1,0 +1,33 @@
+{
+  "diagnostics": [
+    {
+      "code": "LLMF411",
+      "severity": "error",
+      "message": "undefined field 'amount'",
+      "file": "/workspace/project/a.llmform.yaml",
+      "line": 3,
+      "column": 17,
+      "context": "on tool.issue_refund (schema: refund_input.json)",
+      "hint": "field is checked against refund_input.json",
+      "suggestion": "amount_cents"
+    },
+    {
+      "code": "LLMF507",
+      "severity": "warning",
+      "message": "detokenization targets a write operation",
+      "file": "/workspace/project/b.llmform.yaml",
+      "line": 9,
+      "column": 5,
+      "context": null,
+      "hint": "re-substitution may disclose a value",
+      "suggestion": null
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "warnings": 1,
+    "total": 2,
+    "shown": 2,
+    "omitted": 0
+  }
+}

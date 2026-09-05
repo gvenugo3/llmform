@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Annotated
 
@@ -12,7 +11,7 @@ from llmform.config.loader import load_project
 from llmform.config.models import ProjectConfig
 from llmform.config.semantic import validate_semantics
 from llmform.config.validate import validate_references
-from llmform.diagnostics import Severity, render_all
+from llmform.diagnostics import exit_code, render_all, render_json
 from llmform.policy.cel.compiler import validate_policy_rules
 from llmform.policy.cel.environment import validate_schema_profiles
 
@@ -65,23 +64,11 @@ def validate(
         scrubber = None
 
     if json_output:
-        payload = [
-            {
-                "code": item.code,
-                "severity": item.severity.value,
-                "message": item.message,
-                "file": str(item.position.file),
-                "line": item.position.line,
-                "column": item.position.column,
-                "hint": item.hint,
-            }
-            for item in diagnostics
-        ]
-        output = json.dumps(payload, indent=2)
+        output = render_json(diagnostics)
     else:
         output = render_all(diagnostics, document.root)
         if not output:
             output = f"Valid: {len(document.files)} file(s), 0 findings"
     typer.echo(scrubber.scrub(output) if scrubber else output)
-    if any(item.severity == Severity.ERROR for item in diagnostics):
-        raise typer.Exit(1)
+    if code := exit_code(diagnostics):
+        raise typer.Exit(code)

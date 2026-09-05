@@ -676,6 +676,28 @@ See [D9](#d9--serve-ships-with-its-authorization-model-not-before-it--2026-08-25
 | L2 | Tool schema validity, output-narrowing, **CEL type-check against declared schemas**, hook/`match` compatibility, declared data classes, `approvers` presence, price coverage for cost ceilings | no | no |
 | L3 | Provider reachable, model exists, HTTP source connects, MCP command resolvable | `--online` | no |
 
+### Diagnostics
+
+Diagnostic codes are stable public identifiers. The namespace is partitioned by layer:
+
+| Range | Layer |
+|---|---|
+| `LLMF000`–`LLMF099` | discovery and positioned YAML |
+| `LLMF100`–`LLMF199` | typed configuration shape |
+| `LLMF200`–`LLMF299` | interpolation and secrets |
+| `LLMF300`–`LLMF399` | references and dependency graph |
+| `LLMF400`–`LLMF499` | schema profile and CEL compilation |
+| `LLMF500`–`LLMF599` | cross-resource L2 semantics |
+
+Human output is ordered by file, line, column, and code, capped at 50 findings, and ends
+with error/warning totals plus an omitted count when capped. A diagnostic may carry a
+context line, actionable hint, and spelling suggestion as separate fields.
+
+`validate --json` emits an object with `diagnostics` and `summary`. Each diagnostic has
+`code`, `severity`, `message`, `file`, `line`, `column`, `context`, `hint`, and
+`suggestion`; the summary has `errors`, `warnings`, `total`, `shown`, and `omitted`.
+Warnings alone exit zero; any error exits one.
+
 ### `plan`
 
 `llmform plan [--from <git-ref>]` — diffs the config closure between two revisions.
