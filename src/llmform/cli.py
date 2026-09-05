@@ -11,6 +11,7 @@ from llmform.config.format import format_file
 from llmform.config.interpolation import SecretScrubber, resolve_interpolations
 from llmform.config.loader import attach_model_positions, load_project
 from llmform.config.models import ProjectConfig
+from llmform.config.online import validate_online
 from llmform.config.schema import validate_config_schema
 from llmform.config.semantic import validate_semantics
 from llmform.config.validate import validate_references
@@ -180,6 +181,9 @@ def validate(
     locked: Annotated[
         bool, typer.Option("--locked", help="Fail when llmform.lock differs from this project")
     ] = False,
+    online: Annotated[
+        bool, typer.Option("--online", help="Run opt-in endpoint reachability checks")
+    ] = False,
 ) -> None:
     """Validate an llmform project offline."""
     document = load_project(path or Path.cwd())
@@ -206,6 +210,8 @@ def validate(
                     diagnostics.extend(validate_schema_profiles(document))
                     diagnostics.extend(validate_policy_rules(document))
                     diagnostics.extend(validate_semantics(document))
+                    if online and not any(item.severity == Severity.ERROR for item in diagnostics):
+                        diagnostics.extend(validate_online(document))
                     if locked and not any(item.severity == Severity.ERROR for item in diagnostics):
                         try:
                             changed = diff_lock(document)

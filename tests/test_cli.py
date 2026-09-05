@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from time import perf_counter
 
 from typer.testing import CliRunner
 
@@ -142,6 +143,32 @@ def test_fmt_is_idempotent_on_initialized_project(tmp_path: Path) -> None:
 
     assert first.exit_code == second.exit_code == 0
     assert first.output == second.output == "Formatted 0 file(s)\n"
+
+
+def test_validate_online_delegates_to_nonexecuting_l3_checks(tmp_path: Path, monkeypatch) -> None:
+    write_config(tmp_path)
+    called = False
+
+    def check_online(document):
+        nonlocal called
+        called = True
+        return []
+
+    monkeypatch.setattr("llmform.cli.validate_online", check_online)
+    result = runner.invoke(app, ["validate", str(tmp_path), "--online"])
+
+    assert result.exit_code == 0, result.output
+    assert called
+
+
+def test_validate_offline_completes_within_precommit_budget(tmp_path: Path) -> None:
+    write_config(tmp_path)
+
+    started = perf_counter()
+    result = runner.invoke(app, ["validate", str(tmp_path)])
+
+    assert result.exit_code == 0, result.output
+    assert perf_counter() - started < 2
 
 
 def test_validate_scrubs_secrets_from_human_and_json_diagnostics(
