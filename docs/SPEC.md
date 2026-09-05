@@ -1,6 +1,6 @@
 # llmform — Specification (v0.1 target)
 
-Status: **Accepted** (2026-08-23), revised 2026-08-25. Supersedes `ARCHITECTURE.md` and
+Status: **Accepted** (2026-08-23), revised 2026-09-04. Supersedes `ARCHITECTURE.md` and
 `RUNTIME.md`, which are retained only as the record of the abandoned provisioner design.
 The skeleton that implemented that design was removed; recover it with
 `git checkout 7a1a350 -- .`
@@ -379,14 +379,12 @@ Tokenization is what makes the model able to *reference* a value it is never sho
 The token→plaintext mapping is **run-scoped**, not process-scoped, and lives behind an
 interface:
 
-```go
-type TokenVault interface {
-    // Origin records where the plaintext entered: OriginRequest (the caller
-    // already had it) or OriginToolResult (the caller never had it).
-    Put(ctx context.Context, runID, plaintext string, origin Origin) (token string, err error)
-    Resolve(ctx context.Context, runID, token string) (plaintext string, origin Origin, err error)
-    Purge(ctx context.Context, runID string) error
-}
+```python
+class TokenVault(Protocol):
+    # Origin records whether plaintext entered from the caller or a tool result.
+    def put(self, run_id: str, plaintext: str, origin: Origin) -> str: ...
+    def resolve(self, run_id: str, token: str) -> tuple[str, Origin]: ...
+    def purge(self, run_id: str) -> None: ...
 ```
 
 - v0.1 default: in-memory, purged when the run reaches a terminal state.
@@ -443,14 +441,13 @@ Resume is refused unless `RunState.Closure` matches the running config's closure
 
 Every request carries a principal. Policies may reference it.
 
-```go
-type Principal struct {
-    ID     string
-    Tenant string
-    Role   string
-    Scopes []string
-    Attrs  map[string]string
-}
+```python
+class Principal(BaseModel):
+    id: str = ""
+    tenant: str = ""
+    role: str
+    scopes: list[str] = Field(default_factory=list)
+    attrs: dict[str, str] = Field(default_factory=dict)
 ```
 
 `run` injects a local dev principal (`role: developer`) unless `--principal` is given.
@@ -458,21 +455,21 @@ type Principal struct {
 
 ### 4.1 Run state
 
-```go
-type RunState struct {
-    RunID     string
-    Closure   string     // SHA-256 of the config closure; resume refuses on mismatch
-    Agent     string
-    Principal Principal
-    Messages  []Message
-    Classes   []string   // accumulated data classes (§2.3.1), monotonic
-    Iteration int
-    CostUSD   float64
-    Elapsed   time.Duration
-    Pending   *PendingApproval  // non-nil ⇒ suspended
-}
+```python
+class RunState(BaseModel):
+    run_id: str
+    closure: str             # config-closure SHA-256; resume refuses on mismatch
+    agent: str
+    principal: Principal
+    messages: list[Message] = Field(default_factory=list)
+    classes: list[str] = Field(default_factory=list)  # monotonic; see §2.3.1
+    iteration: int = 0
+    cost_usd: float = 0.0
+    elapsed: timedelta = timedelta(0)
+    pending: PendingApproval | None = None  # non-null means suspended
 
-func (l *Loop) Step(ctx context.Context, s RunState) (RunState, error)
+class Loop(Protocol):
+    def step(self, state: RunState) -> RunState: ...
 ```
 
 `Closure` and `Classes` are what make a resumed run enforce the same rules against the
@@ -749,14 +746,26 @@ messages that raised it — otherwise trimming silently lowers the sensitivity c
 
 ## 10. Package layout
 
+Implemented today:
+
 ```
 src/llmform/
   cli.py                Typer command entrypoint
   diagnostics.py        positioned diagnostics and renderers
-  config/               discovery, positioned YAML, Pydantic AST, interpolation, L0–L3
+  types.py              Principal, Message, RunState, Verdict, approval state
+  config/               discovery, YAML, typed AST, interpolation, L0–L2
+  schemas/              packaged Draft 2020-12 configuration schemas
+  policy/cel/           schema types, hook environments, parser and type-checker
+tests/                  unit and golden diagnostic fixtures
+scripts/                deterministic schema generation
+```
+
+Planned v0.1 additions:
+
+```
+src/llmform/
   graph/                DAG, cycles, topo order
   policy/
-    cel/                environment construction, type-check
     engine/             hook dispatch, verdicts, transform staging
     transform/          redact, tokenize
     vault/              TokenVault (§3.5.1)
@@ -772,8 +781,6 @@ src/llmform/
   audit/                chained record writer + sinks
   plan/                 config diff + impact classification
   lock/                 closure lock read/write
-schemas/                JSON Schema for config kinds
-tests/                  unit, integration, and golden diagnostic fixtures
 examples/support-bot/
 ```
 
@@ -809,7 +816,7 @@ policies · Anthropic provider.
 Evaluations, policy tests, tool-invocation assertions, eval baselines, `test`.
 
 ### v0.4 — ecosystem
-Modules · provider SDK · `go-plugin` ABI · registry.
+Modules · provider SDK · isolated subprocess plugin protocol · registry.
 
 ---
 
@@ -840,15 +847,16 @@ resumability into a straight-line executor is a rewrite rather than a refactor.
 
 ### D3 — CEL is the policy expression language ✅ 2026-08-23
 
-`github.com/google/cel-go`. Typed, sandboxed, non-Turing-complete, no external runtime.
+`cel-python`. Typed, sandboxed, non-Turing-complete, and embedded in the validator.
 
 Decisive property — offline type-checking of rules against declared schemas:
 
 ```
 $ llmform validate
-llmform.yaml:31:11: undefined field 'amount'
+llmform.yaml:31:11: error [LLMF411]: undefined field 'amount'
   on tool.issue_refund (schema: refund_input.json)
   did you mean 'amount_cents'?
+Summary: 1 error, 0 warnings
 ```
 
 Rego/OPA was rejected as a heavier mental model for mostly single-predicate rules with
@@ -857,10 +865,10 @@ it grows into a language anyway, without a type checker.
 
 ### D4 — "Chatform" is retired ✅ 2026-08-23
 
-One binary, one name. The runtime lives at `internal/runtime`; public SDK types move from
-`pkg/chatform` to `pkg/llmform`. Two names for one project splits the documentation and
-the pitch before there are any users. The control-plane/data-plane framing survives as an
-internal package boundary, not as a product boundary.
+One package, one CLI, one name. The runtime lives under `llmform.runtime`; shared SDK
+types live in `llmform.types`. Two names for one project splits the documentation and the
+pitch before there are any users. The control-plane/data-plane framing survives as an
+internal package boundary, not as a separate product.
 
 ### D5 — Attachment gates, `match` filters ✅ 2026-08-25
 

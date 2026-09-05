@@ -239,7 +239,14 @@ def validate_semantics(document: ConfigDocument) -> list[Diagnostic]:  # noqa: C
             continue
         model_name = _name(agent.model, "model")
         model = config.models.get(model_name)
-        if model is not None and model.price is None:
+        provider = (
+            config.providers.get(_name(model.provider, "provider")) if model is not None else None
+        )
+        if (
+            model is not None
+            and model.price is None
+            and getattr(provider, "type", None) != "ollama"
+        ):
             diagnostics.append(
                 Diagnostic(
                     "LLMF505",

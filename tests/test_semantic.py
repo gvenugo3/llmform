@@ -103,6 +103,7 @@ def test_cost_enforcement_requires_declared_model_price(tmp_path: Path) -> None:
     config = config.replace(
         "    policies: [policy.safe]\n", "    policies: [policy.safe]\n    max_cost_usd: 1.0\n"
     )
+    config = config.replace("type: ollama", "type: openai")
     result = finding(tmp_path, config, "LLMF505")
     assert "model.default" in result.message
     assert "declared price" in result.message
@@ -112,8 +113,17 @@ def test_cost_rule_requires_declared_model_price(tmp_path: Path) -> None:
     config = VALID.replace("on: tool_call", "on: loop").replace(
         'rule: "true"', 'rule: "cost_usd < 1.0"'
     )
+    config = config.replace("type: ollama", "type: openai")
     result = finding(tmp_path, config, "LLMF505")
     assert "cost enforcement" in result.message
+
+
+def test_ollama_is_implicitly_zero_cost(tmp_path: Path) -> None:
+    config = VALID.replace(
+        "    policies: [policy.safe]\n", "    policies: [policy.safe]\n    max_cost_usd: 1.0\n"
+    )
+    write_config(tmp_path, config)
+    assert not any(item.code == "LLMF505" for item in validate_semantics(load_project(tmp_path)))
 
 
 def test_detokenize_field_must_exist_in_input_schema(tmp_path: Path) -> None:

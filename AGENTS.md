@@ -5,7 +5,8 @@
 Python source lives under `src/llmform/`. The CLI entrypoint is `cli.py`; configuration
 discovery, parsing, interpolation, models, and validation live in `src/llmform/config/`.
 Keep reusable diagnostics in `diagnostics.py` and expose public APIs deliberately from
-package `__init__.py` files.
+package `__init__.py` files. Packaged configuration schemas live in
+`src/llmform/schemas/`; regenerate them with `scripts/generate_config_schemas.py`.
 
 Tests live in `tests/` and should mirror the source area they exercise. The accepted
 design is normative in `docs/SPEC.md`; `ARCHITECTURE.md`, `RUNTIME.md`, and
@@ -23,9 +24,10 @@ python -m pip install -e '.[dev]'
 python -m llmform --help
 ```
 
-Run `python -m ruff check src tests` for linting and `python -m ruff format src tests`
-for formatting. Run `python -m pytest -q` for tests and coverage. Use
-`python -m compileall -q src tests` as a lightweight syntax/package check.
+Run `python -m ruff check src tests scripts` for linting and
+`python -m ruff format src tests scripts` for formatting. Run `python -m pytest -q` for
+tests and coverage. Use `python -m compileall -q src tests scripts` as a lightweight
+syntax/package check.
 
 ## Coding Style & Naming Conventions
 
