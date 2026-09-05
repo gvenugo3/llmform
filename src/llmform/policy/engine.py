@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from llmform.config.loader import ConfigDocument
-from llmform.types import Hook, RecordedOutcome, Verdict
+from llmform.types import Hook, RecordedOutcome, RunState, Verdict
 
 RuleEvaluator = Callable[[str, Mapping[str, Any]], bool]
 TransformStager = Callable[[str, Any], Callable[[], Any]]
@@ -45,10 +45,10 @@ class PolicyEngine:
             policy = self.config.policies[name]
             if policy.on != hook.value or not self._matches(policy.match, context):
                 continue
-            if policy.rule is not None and not self.evaluate(policy.rule, context):
-                continue
             applied.append(name)
-            staged.extend(self.stage(transform.kind, payload) for transform in policy.transform)
+            if policy.rule is None or self.evaluate(policy.rule, context):
+                staged.extend(self.stage(transform.kind, payload) for transform in policy.transform)
+                continue
             verdict = Verdict(policy.otherwise)
             if verdict != Verdict.ALLOW:
                 return DispatchResult(verdict, payload, tuple(applied))
@@ -58,6 +58,36 @@ class PolicyEngine:
             payload = commit()
         outcome = RecordedOutcome.TRANSFORM if staged else RecordedOutcome.NOT_APPLICABLE
         return DispatchResult(outcome, payload, tuple(applied))
+
+    def admit_tool_result(self, state: RunState, tool_name: str) -> RunState:
+        """Record the declared classes when a tool result enters a run.
+
+        Classification belongs to the source operation, rather than the result
+        fields or any transforms applied to them.  Consequently this only ever
+        adds classes; later redaction cannot lower the run's data ceiling.
+        """
+
+        tool = self.config.tools[tool_name.removeprefix("tool.")]
+        source = self.config.sources[tool.source.removeprefix("source.")]
+        operation = source.operations[tool.operation]
+        classes = list(dict.fromkeys([*state.classes, *operation.classes]))
+        return state.model_copy(update={"classes": classes})
+
+    def dispatch_model_call(
+        self,
+        agent_name: str,
+        state: RunState,
+        payload: Any,
+        model: Mapping[str, Any],
+        context: Mapping[str, Any] | None = None,
+    ) -> DispatchResult:
+        """Dispatch a model call with its data classification derived from state."""
+
+        model_context = dict(context or {})
+        model_context["model"] = model
+        model_context["messages"] = [message.model_dump(mode="json") for message in state.messages]
+        model_context["data"] = {"classes": list(state.classes)}
+        return self.dispatch(agent_name, Hook.MODEL_CALL, payload, model_context)
 
     @staticmethod
     def _matches(match: object, context: Mapping[str, Any]) -> bool:
