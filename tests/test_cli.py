@@ -4,7 +4,9 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from llmform.cli import app
+from llmform.config.loader import load_project
 from llmform.diagnostics import Diagnostic, Severity
+from llmform.lock import write_lock
 from tests.test_config import VALID, write_config
 
 runner = CliRunner()
@@ -39,6 +41,21 @@ def test_validate_json_uses_structured_diagnostic_envelope(tmp_path: Path) -> No
     }
 
 
+def test_validate_reports_malformed_variable_declarations_after_interpolation(
+    tmp_path: Path, monkeypatch
+) -> None:
+    (tmp_path / "llmform.yaml").write_text(
+        "version: ${env.LLMFORM_VERSION}\nvariables: []\n", encoding="utf-8"
+    )
+    monkeypatch.setenv("LLMFORM_VERSION", "0.1")
+
+    result = runner.invoke(app, ["validate", str(tmp_path), "--json"])
+
+    assert result.exit_code == 1
+    payload = json.loads(result.output)
+    assert any(item["code"] == "LLMF100" for item in payload["diagnostics"])
+
+
 def test_validate_command_rejects_unsupported_policy_schema(tmp_path: Path) -> None:
     write_config(tmp_path)
     (tmp_path / "schemas/input.json").write_text(
@@ -59,6 +76,61 @@ def test_validate_command_reports_warning_without_failing(tmp_path: Path) -> Non
     result = runner.invoke(app, ["validate", str(tmp_path)])
     assert result.exit_code == 0
     assert "warning [LLMF507]" in result.output
+
+
+def test_validate_locked_reports_lockfile_drift(tmp_path: Path) -> None:
+    write_config(tmp_path)
+    (tmp_path / "prompts").mkdir()
+    (tmp_path / "prompts" / "support.md").write_text("Support", encoding="utf-8")
+    write_lock(load_project(tmp_path))
+    clean = runner.invoke(app, ["validate", str(tmp_path), "--locked"])
+    assert clean.exit_code == 0, clean.output
+
+    write_config(tmp_path, VALID.replace('rule: "true"', 'rule: "false"'))
+    drifted = runner.invoke(app, ["validate", str(tmp_path), "--locked"])
+    assert drifted.exit_code == 1
+    assert "LLMF102" in drifted.output
+    assert "changed sections: closure_sha256, files, policies" in drifted.output
+
+
+def test_lock_command_writes_a_lockfile(tmp_path: Path) -> None:
+    write_config(tmp_path)
+    (tmp_path / "prompts").mkdir()
+    (tmp_path / "prompts" / "support.md").write_text("Support", encoding="utf-8")
+
+    result = runner.invoke(app, ["lock", str(tmp_path)])
+
+    assert result.exit_code == 0, result.output
+    assert "Wrote" in result.output
+    assert (tmp_path / "llmform.lock").is_file()
+
+
+def test_lock_command_resolves_declared_cli_variables(tmp_path: Path) -> None:
+    config = VALID.replace(
+        'version: "0.1"\n',
+        'version: "0.1"\nvariables:\n  tokens:\n    type: integer\n    required: true\n',
+    ).replace("    id: llama3.2\n", "    id: llama3.2\n    max_tokens: ${var.tokens}\n")
+    write_config(tmp_path, config)
+    (tmp_path / "prompts").mkdir()
+    (tmp_path / "prompts" / "support.md").write_text("Support", encoding="utf-8")
+
+    result = runner.invoke(app, ["lock", str(tmp_path), "--var", "tokens=512"])
+
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "llmform.lock").is_file()
+
+
+def test_init_creates_a_valid_locked_project(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+
+    result = runner.invoke(app, ["init", str(project)])
+
+    assert result.exit_code == 0, result.output
+    assert (project / "llmform.yaml").is_file()
+    assert (project / "prompts" / "assistant.md").is_file()
+    assert (project / "llmform.lock").is_file()
+    validation = runner.invoke(app, ["validate", str(project), "--locked"])
+    assert validation.exit_code == 0, validation.output
 
 
 def test_validate_scrubs_secrets_from_human_and_json_diagnostics(
@@ -88,6 +160,25 @@ def test_validate_scrubs_secrets_from_human_and_json_diagnostics(
     assert secret not in structured.output
     assert "[REDACTED]" in human.output
     assert "[REDACTED]" in structured.output
+
+
+def test_validate_scrubs_json_escaped_secret_before_serialization(
+    tmp_path: Path, monkeypatch
+) -> None:
+    secret = 'never-print-"this-secret'
+    config = VALID.replace(
+        "    id: llama3.2", "    id: llama3.2\n    max_tokens: ${secret.API_TOKEN}"
+    )
+    write_config(tmp_path, config)
+    monkeypatch.setenv("API_TOKEN", secret)
+
+    result = runner.invoke(app, ["validate", str(tmp_path), "--json"])
+
+    assert result.exit_code == 1
+    payload = json.loads(result.output)
+    assert secret not in result.output
+    assert secret not in payload["diagnostics"][0]["message"]
+    assert "[REDACTED]" in payload["diagnostics"][0]["message"]
 
 
 def test_validate_scrubs_secret_from_unexpected_error(tmp_path: Path, monkeypatch) -> None:
