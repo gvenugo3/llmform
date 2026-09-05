@@ -71,7 +71,7 @@ def test_duplicate_resource_cites_first_and_keeps_its_position(tmp_path: Path) -
     document = load_project(tmp_path)
     duplicates = [item for item in document.diagnostics if item.code == "LLMF003"]
     assert [item.position.file for item in duplicates] == [second, third]
-    first_position = document.position(("providers", "local"))
+    first_position = document.key_position(("providers", "local"))
     assert first_position.file == first
     assert all(first_position.display() in (item.hint or "") for item in duplicates)
 

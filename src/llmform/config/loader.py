@@ -38,11 +38,25 @@ LlmformLoader.add_implicit_resolver(
 
 
 @dataclass
+class YamlSource:
+    """One parsed source file, retaining text for comment-preserving round trips."""
+
+    file: Path
+    text: str
+    node: Node | None
+
+    def render(self) -> str:
+        return self.text
+
+
+@dataclass
 class ConfigDocument:
     root: Path
     files: list[Path]
+    sources: list[YamlSource]
     raw: dict[str, Any]
     positions: dict[PathKey, Position]
+    key_positions: dict[PathKey, Position]
     config: ProjectConfig | None
     diagnostics: list[Diagnostic]
 
@@ -53,6 +67,11 @@ class ConfigDocument:
                 return self.positions[probe]
             probe = probe[:-1]
         return Position(self.files[0] if self.files else self.root)
+
+    def key_position(self, path: PathKey) -> Position:
+        if path in self.key_positions:
+            return self.key_positions[path]
+        return self.position(path)
 
 
 def _scalar_key(node: Node) -> str:
@@ -65,6 +84,7 @@ def _collect_positions(
     node: Node,
     file: Path,
     positions: dict[PathKey, Position],
+    key_positions: dict[PathKey, Position],
     diagnostics: list[Diagnostic],
     path: PathKey = (),
 ) -> None:
@@ -108,13 +128,23 @@ def _collect_positions(
                 )
             else:
                 seen[key] = key_node
+            key_positions[path + (key,)] = Position(
+                file, key_node.start_mark.line + 1, key_node.start_mark.column + 1
+            )
             positions[path + (key,)] = Position(
                 file, value_node.start_mark.line + 1, value_node.start_mark.column + 1
             )
-            _collect_positions(value_node, file, positions, diagnostics, path + (key,))
+            _collect_positions(
+                value_node,
+                file,
+                positions,
+                key_positions,
+                diagnostics,
+                path + (key,),
+            )
     elif isinstance(node, SequenceNode):
         for index, item in enumerate(node.value):
-            _collect_positions(item, file, positions, diagnostics, path + (index,))
+            _collect_positions(item, file, positions, key_positions, diagnostics, path + (index,))
 
 
 def _merge(
@@ -123,6 +153,8 @@ def _merge(
     file: Path,
     source_positions: dict[PathKey, Position],
     positions: dict[PathKey, Position],
+    source_key_positions: dict[PathKey, Position],
+    key_positions: dict[PathKey, Position],
     diagnostics: list[Diagnostic],
 ) -> None:
     resource_blocks = {"variables", "providers", "models", "sources", "tools", "policies", "agents"}
@@ -136,13 +168,15 @@ def _merge(
                 path = (key, name)
                 if name in block:
                     rejected_prefixes.append(path)
-                    first = positions.get(path)
+                    first = key_positions.get(path, positions.get(path))
                     diagnostics.append(
                         Diagnostic(
                             "LLMF003",
                             Severity.ERROR,
                             f"duplicate resource {key[:-1]}.{name}",
-                            source_positions.get(path, Position(file)),
+                            source_key_positions.get(
+                                path, source_positions.get(path, Position(file))
+                            ),
                             f"first declared at {first.display() if first else 'an earlier file'}",
                         )
                     )
@@ -150,13 +184,13 @@ def _merge(
                 block[name] = resource
         elif key in target:
             rejected_prefixes.append((key,))
-            first = positions.get((key,))
+            first = key_positions.get((key,), positions.get((key,)))
             diagnostics.append(
                 Diagnostic(
                     "LLMF004",
                     Severity.ERROR,
                     f"top-level key {key!r} may be declared only once",
-                    source_positions.get((key,), Position(file)),
+                    source_key_positions.get((key,), source_positions.get((key,), Position(file))),
                     f"first declared at {first.display() if first else 'an earlier file'}",
                 )
             )
@@ -168,6 +202,10 @@ def _merge(
         # Shared block/root positions belong to the first file; positions for a newly
         # accepted resource or field have no existing entry and are added normally.
         positions.setdefault(path, position)
+    for path, position in source_key_positions.items():
+        if any(path[: len(prefix)] == prefix for prefix in rejected_prefixes):
+            continue
+        key_positions.setdefault(path, position)
 
 
 def load_project(start: Path) -> ConfigDocument:
@@ -177,6 +215,8 @@ def load_project(start: Path) -> ConfigDocument:
         return ConfigDocument(
             start.resolve(),
             [],
+            [],
+            {},
             {},
             {},
             None,
@@ -185,7 +225,9 @@ def load_project(start: Path) -> ConfigDocument:
 
     files = discover_files(root)
     raw: dict[str, Any] = {}
+    sources: list[YamlSource] = []
     positions: dict[PathKey, Position] = {}
+    key_positions: dict[PathKey, Position] = {}
     diagnostics: list[Diagnostic] = []
     for file in files:
         try:
@@ -203,11 +245,13 @@ def load_project(start: Path) -> ConfigDocument:
                 )
             )
             continue
+        sources.append(YamlSource(file, text, node))
         if node is None:
             loaded = {}
             continue
         local_positions: dict[PathKey, Position] = {}
-        _collect_positions(node, file, local_positions, diagnostics)
+        local_key_positions: dict[PathKey, Position] = {}
+        _collect_positions(node, file, local_positions, local_key_positions, diagnostics)
         if not isinstance(loaded, dict):
             diagnostics.append(
                 Diagnostic(
@@ -218,7 +262,16 @@ def load_project(start: Path) -> ConfigDocument:
                 )
             )
             continue
-        _merge(raw, loaded, file, local_positions, positions, diagnostics)
+        _merge(
+            raw,
+            loaded,
+            file,
+            local_positions,
+            positions,
+            local_key_positions,
+            key_positions,
+            diagnostics,
+        )
 
     config: ProjectConfig | None = None
     if not any(item.severity == Severity.ERROR for item in diagnostics):
@@ -227,12 +280,26 @@ def load_project(start: Path) -> ConfigDocument:
         except ValidationError as exc:
             for error in exc.errors(include_url=False):
                 path = tuple(error["loc"])
+                position = (
+                    key_positions.get(path)
+                    if error["type"] == "extra_forbidden"
+                    else positions.get(path)
+                )
                 diagnostics.append(
                     Diagnostic(
                         "LLMF100",
                         Severity.ERROR,
                         error["msg"],
-                        positions.get(path, positions.get(path[:-1], Position(files[0]))),
+                        position or positions.get(path[:-1], Position(files[0])),
                     )
                 )
-    return ConfigDocument(root, files, raw, positions, config, diagnostics)
+    return ConfigDocument(
+        root,
+        files,
+        sources,
+        raw,
+        positions,
+        key_positions,
+        config,
+        diagnostics,
+    )
