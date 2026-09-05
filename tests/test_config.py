@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from llmform.config.interpolation import resolve_interpolations
@@ -24,6 +25,8 @@ sources:
       search:
         method: GET
         path: /search
+        params:
+          query: {type: string, required: true}
         returns: schemas/result.json
 tools:
   search:
@@ -45,6 +48,16 @@ agents:
 
 
 def write_config(tmp_path: Path, text: str = VALID) -> Path:
+    schemas = tmp_path / "schemas"
+    schemas.mkdir(exist_ok=True)
+    closed_object = {
+        "type": "object",
+        "properties": {"query": {"type": "string"}},
+        "required": ["query"],
+        "additionalProperties": False,
+    }
+    (schemas / "input.json").write_text(json.dumps(closed_object), encoding="utf-8")
+    (schemas / "result.json").write_text(json.dumps(closed_object), encoding="utf-8")
     path = tmp_path / "llmform.yaml"
     path.write_text(text, encoding="utf-8")
     return path
@@ -63,7 +76,7 @@ def test_unknown_reference_has_exact_position(tmp_path: Path) -> None:
     document = load_project(tmp_path)
     findings = validate_references(document)
     error = next(item for item in findings if item.code == "LLMF300")
-    assert error.position.line == 31
+    assert error.position.line == document.position(("agents", "support", "model")).line
     assert "model.missing" in error.message
 
 

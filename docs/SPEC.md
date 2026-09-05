@@ -341,6 +341,30 @@ error with a line number**, offline. This is the property that justifies the cho
 it is why §2.6.1 gives the agent-level hooks default schemas rather than leaving them
 dynamically typed.
 
+#### 3.4.1 JSON Schema profile for CEL
+
+Schemas used as policy types are deliberately a closed subset of JSON Schema:
+
+- objects with named `properties`, a string `required` list, and
+  `additionalProperties: false`;
+- homogeneous arrays whose `items` is one supported schema;
+- `string`, `number`, `integer`, and `boolean` scalars;
+- string-valued `enum`; and
+- acyclic `$ref` references to the same document's `$defs`.
+
+Validation-only keywords that do not change the CEL type, such as numeric bounds,
+string lengths, `format`, and array size limits, remain valid and are enforced when the
+payload is validated. Constructs that change or erase the static type are rejected at
+L0: `oneOf`, `anyOf`, `allOf`, `not`, nullable/type arrays, tuple-form `items`, remote
+or cyclic `$ref`, `patternProperties`, and open or schema-valued
+`additionalProperties`. Because JSON Schema defaults an omitted `additionalProperties`
+to `true`, policy-facing object schemas must state `additionalProperties: false`.
+
+An unsupported construct produces a positioned diagnostic naming its schema path. It
+never falls back to CEL `dyn`; accepting a schema that cannot be checked would silently
+disable the guarantee this feature exists to provide. See
+[D13](#d13--policy-facing-json-schema-is-a-closed-profile--2026-09-04).
+
 ### 3.5 Transforms
 
 | Kind | Reversible | Behaviour |
@@ -863,6 +887,16 @@ and providers expose no stable content hash per model ID) or "provider versions"
 (providers are internal packages until v0.4). It pins file hashes, model IDs as written,
 declared prices, the normalized policy set with attachments, the operation catalog with
 MCP argv hashes, and schema/binary versions (§7.2).
+
+### D13 — Policy-facing JSON Schema is a closed profile ✅ 2026-09-04
+
+The supported profile is defined in §3.4.1. Open objects, unions, tuple arrays, nullable
+types, and references outside acyclic local `$defs` are rejected at L0 rather than
+mapped to CEL `dyn`. In particular, `additionalProperties: true` (including its implicit
+default when omitted) is rejected. Treating undeclared properties as absent from the
+type environment was rejected because the runtime contract would still admit data that
+the policy author could neither name nor type-check. Requiring closed objects makes the
+runtime validation boundary and policy type environment describe the same values.
 
 ### Still open
 

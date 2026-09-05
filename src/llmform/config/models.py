@@ -49,6 +49,13 @@ class HttpOperation(StrictModel):
     classes: list[str] = Field(default_factory=list)
 
 
+class McpOperation(StrictModel):
+    params: dict[str, OperationParameter] = Field(default_factory=dict)
+    returns: str
+    classes: list[str] = Field(default_factory=list)
+    read_only: bool | None = None
+
+
 class HttpAuth(StrictModel):
     type: Literal["bearer", "basic"]
     token: str | None = None
@@ -67,7 +74,7 @@ class McpSource(StrictModel):
     type: Literal["mcp"]
     command: list[str]
     # MCP catalogs must be checked in so offline validation never executes a server.
-    operations: dict[str, HttpOperation]
+    operations: dict[str, McpOperation]
 
 
 Source = Annotated[HttpSource | McpSource, Field(discriminator="type")]
@@ -98,7 +105,7 @@ class Transform(StrictModel):
 
 
 class Approval(StrictModel):
-    approvers: str
+    approvers: str = Field(min_length=1)
 
 
 class Policy(StrictModel):

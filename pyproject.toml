@@ -9,6 +9,7 @@ description = "Policy-enforced declarative LLM applications"
 readme = "docs/SPEC.md"
 requires-python = ">=3.12"
 dependencies = [
+  "cel-python>=0.5,<0.6",
   "jsonschema>=4.23",
   "pydantic>=2.10",
   "PyYAML>=6.0.2",

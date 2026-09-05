@@ -10,8 +10,11 @@ from llmform import __version__
 from llmform.config.interpolation import resolve_interpolations
 from llmform.config.loader import load_project
 from llmform.config.models import ProjectConfig
+from llmform.config.semantic import validate_semantics
 from llmform.config.validate import validate_references
 from llmform.diagnostics import Severity, render_all
+from llmform.policy.cel.compiler import validate_policy_rules
+from llmform.policy.cel.environment import validate_schema_profiles
 
 app = typer.Typer(no_args_is_help=True, pretty_exceptions_enable=False)
 
@@ -55,6 +58,9 @@ def validate(
                 typer.echo(scrubber.scrub(str(exc)), err=True)
                 raise typer.Exit(1) from None
             diagnostics.extend(validate_references(document))
+            diagnostics.extend(validate_schema_profiles(document))
+            diagnostics.extend(validate_policy_rules(document))
+            diagnostics.extend(validate_semantics(document))
     else:
         scrubber = None
 

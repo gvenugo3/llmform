@@ -1,0 +1,73 @@
+{
+  "run_id": "run_01K4",
+  "closure": "sha256:0123456789abcdef",
+  "agent": "agent.support",
+  "principal": {
+    "id": "developer@example.test",
+    "tenant": "local",
+    "role": "developer",
+    "scopes": [
+      "refund:read"
+    ],
+    "attrs": {
+      "team": "support"
+    }
+  },
+  "messages": [
+    {
+      "role": "user",
+      "content": "Look up order 42",
+      "tool_calls": [],
+      "tool_results": []
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_1",
+          "name": "get_order",
+          "arguments": {
+            "order_id": 42
+          }
+        }
+      ],
+      "tool_results": []
+    },
+    {
+      "role": "tool",
+      "content": null,
+      "tool_calls": [],
+      "tool_results": [
+        {
+          "tool_call_id": "call_1",
+          "name": "get_order",
+          "content": {
+            "total": 125.5,
+            "refundable": true
+          },
+          "is_error": false
+        }
+      ]
+    }
+  ],
+  "classes": [
+    "pii",
+    "restricted"
+  ],
+  "iteration": 2,
+  "cost_usd": 0.00125,
+  "elapsed": "PT1.25S",
+  "pending": {
+    "hook": "tool_call",
+    "policy": "policy.refund_limit",
+    "rule": "args.amount_cents <= 10000",
+    "approvers": "principal.role == \"supervisor\"",
+    "payload": {
+      "tool": "tool.issue_refund",
+      "args": {
+        "amount_cents": 12500
+      }
+    }
+  }
+}
