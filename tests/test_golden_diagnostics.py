@@ -24,7 +24,8 @@ def _normalized_json(output: str, project: Path) -> str:
 
 
 def _normalized_human(output: str, project: Path) -> str:
-    return "\n".join(line.rstrip() for line in output.replace(str(project.resolve()), ".").splitlines()) + "\n"
+    normalized = output.replace(str(project.resolve()), ".")
+    return "\n".join(line.rstrip() for line in normalized.splitlines()) + "\n"
 
 
 @pytest.mark.parametrize("project", _fixtures(), ids=lambda path: path.name)
