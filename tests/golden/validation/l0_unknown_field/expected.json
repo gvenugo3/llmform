@@ -1,0 +1,22 @@
+{
+  "diagnostics": [
+    {
+      "code": "LLMF100",
+      "severity": "error",
+      "message": "unknown field 'mdoels'",
+      "file": "llmform.yaml",
+      "line": 2,
+      "column": 1,
+      "context": null,
+      "hint": null,
+      "suggestion": null
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "warnings": 0,
+    "total": 1,
+    "shown": 1,
+    "omitted": 0
+  }
+}

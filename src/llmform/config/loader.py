@@ -118,8 +118,22 @@ def _collect_positions(
     key_positions: dict[PathKey, Position],
     diagnostics: list[Diagnostic],
     path: PathKey = (),
+    active_nodes: set[int] | None = None,
 ) -> None:
+    active_nodes = active_nodes if active_nodes is not None else set()
+    node_id = id(node)
     positions[path] = Position(file, node.start_mark.line + 1, node.start_mark.column + 1)
+    if node_id in active_nodes:
+        diagnostics.append(
+            Diagnostic(
+                "LLMF006",
+                Severity.ERROR,
+                "recursive YAML aliases are unsupported",
+                positions[path],
+            )
+        )
+        return
+    active_nodes.add(node_id)
     if isinstance(node, MappingNode):
         seen: dict[str, Node] = {}
         for key_node, value_node in node.value:
@@ -172,10 +186,14 @@ def _collect_positions(
                 key_positions,
                 diagnostics,
                 path + (key,),
+                active_nodes,
             )
     elif isinstance(node, SequenceNode):
         for index, item in enumerate(node.value):
-            _collect_positions(item, file, positions, key_positions, diagnostics, path + (index,))
+            _collect_positions(
+                item, file, positions, key_positions, diagnostics, path + (index,), active_nodes
+            )
+    active_nodes.remove(node_id)
 
 
 def _merge(
@@ -239,11 +257,26 @@ def _merge(
         key_positions.setdefault(path, position)
 
 
-def _contains_interpolation(value: Any) -> bool:
+def _contains_interpolation(value: Any, active_values: set[int] | None = None) -> bool:
+    active_values = active_values if active_values is not None else set()
     if isinstance(value, dict):
-        return any(_contains_interpolation(item) for item in value.values())
+        value_id = id(value)
+        if value_id in active_values:
+            return False
+        active_values.add(value_id)
+        try:
+            return any(_contains_interpolation(item, active_values) for item in value.values())
+        finally:
+            active_values.remove(value_id)
     if isinstance(value, list):
-        return any(_contains_interpolation(item) for item in value)
+        value_id = id(value)
+        if value_id in active_values:
+            return False
+        active_values.add(value_id)
+        try:
+            return any(_contains_interpolation(item, active_values) for item in value)
+        finally:
+            active_values.remove(value_id)
     return isinstance(value, str) and INTERPOLATION_VALUE.fullmatch(value) is not None
 
 

@@ -1,0 +1,4 @@
+llmform.yaml:4:5: warning [LLMF303]: provider.local is unreachable
+llmform.yaml:8:5: warning [LLMF303]: model.default is unreachable
+llmform.yaml:8:15: error [LLMF300]: unknown reference provider.missing
+Summary: 1 error, 2 warnings

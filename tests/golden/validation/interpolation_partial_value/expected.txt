@@ -1,0 +1,2 @@
+llmform.yaml:5:15: error [LLMF201]: interpolation must occupy the entire scalar value
+Summary: 1 error, 0 warnings

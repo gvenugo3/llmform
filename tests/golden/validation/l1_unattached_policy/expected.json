@@ -1,0 +1,22 @@
+{
+  "diagnostics": [
+    {
+      "code": "LLMF302",
+      "severity": "warning",
+      "message": "policy.unused is not attached to any agent",
+      "file": "llmform.yaml",
+      "line": 4,
+      "column": 5,
+      "context": null,
+      "hint": null,
+      "suggestion": null
+    }
+  ],
+  "summary": {
+    "errors": 0,
+    "warnings": 1,
+    "total": 1,
+    "shown": 1,
+    "omitted": 0
+  }
+}

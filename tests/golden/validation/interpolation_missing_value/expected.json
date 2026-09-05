@@ -1,0 +1,22 @@
+{
+  "diagnostics": [
+    {
+      "code": "LLMF200",
+      "severity": "error",
+      "message": "unresolved interpolation ${env.MISSING_GOLDEN_VALUE}: value is not defined",
+      "file": "llmform.yaml",
+      "line": 1,
+      "column": 8,
+      "context": null,
+      "hint": null,
+      "suggestion": null
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "warnings": 0,
+    "total": 1,
+    "shown": 1,
+    "omitted": 0
+  }
+}

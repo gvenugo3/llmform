@@ -68,9 +68,13 @@ class ExpressionTypeChecker:
             if len(children) == 2 and str(children[0].data).startswith("unary_"):
                 value = self._infer(children[1])
                 operator = str(children[0].data)
-                expected = BOOL if operator == "unary_not" else INT
-                self._expect(value, expected, node, f"{operator} has an incompatible operand")
-                return expected
+                if operator == "unary_not":
+                    self._expect(value, BOOL, node, f"{operator} has an incompatible operand")
+                    return BOOL
+                if value is None or value.kind not in {CelKind.INT, CelKind.DOUBLE}:
+                    self._error(node, f"{operator} has an incompatible operand")
+                    return None
+                return value
             return self._infer(children[0]) if children else None
         if name in {"conditionalor", "conditionaland"}:
             if len(children) == 1:
@@ -105,7 +109,9 @@ class ExpressionTypeChecker:
             allowed = {CelKind.INT, CelKind.DOUBLE}
             if operator == "addition_add":
                 allowed |= {CelKind.STRING, CelKind.LIST}
-            if not self._compatible(left, right) or left is None or left.kind not in allowed:
+            if operator == "multiplication_mod":
+                allowed = {CelKind.INT}
+            if left is None or left.kind not in allowed or left != right:
                 self._error(node, "arithmetic operands have incompatible types")
                 return None
             return left
@@ -258,11 +264,7 @@ class ExpressionTypeChecker:
 
     @staticmethod
     def _compatible(left: CelType | None, right: CelType | None) -> bool:
-        if left is None or right is None:
-            return False
-        if left == right:
-            return True
-        return {left.kind, right.kind} == {CelKind.INT, CelKind.DOUBLE}
+        return left is not None and left == right
 
     @staticmethod
     def _ordered(value: CelType | None) -> bool:

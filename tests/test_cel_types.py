@@ -60,6 +60,9 @@ def test_supported_schema_constructs_compile(schema: object, kind: CelKind) -> N
             "additionalProperties",
         ),
         ({"$ref": "https://example.test/schema.json"}, "this document's $defs"),
+        ({"type": "string", "minLength": -1}, "invalid JSON Schema"),
+        ({"type": "string", "pattern": "["}, "invalid JSON Schema"),
+        ({"type": "integer", "enum": [1, 2]}, "enum is supported only for string schemas"),
         (
             {
                 "$defs": {

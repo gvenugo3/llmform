@@ -1,0 +1,22 @@
+{
+  "diagnostics": [
+    {
+      "code": "LLMF005",
+      "severity": "error",
+      "message": "configuration root must be a mapping",
+      "file": "llmform.yaml",
+      "line": 1,
+      "column": 1,
+      "context": null,
+      "hint": null,
+      "suggestion": null
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "warnings": 0,
+    "total": 1,
+    "shown": 1,
+    "omitted": 0
+  }
+}

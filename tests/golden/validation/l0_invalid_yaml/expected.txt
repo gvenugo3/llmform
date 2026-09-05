@@ -1,0 +1,6 @@
+llmform.yaml:3:1: error [LLMF001]: while parsing a flow node
+expected the node content, but found '<stream end>'
+  in "<unicode string>", line 3, column 1:
+
+    ^
+Summary: 1 error, 0 warnings

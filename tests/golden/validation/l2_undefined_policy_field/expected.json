@@ -1,0 +1,33 @@
+{
+  "diagnostics": [
+    {
+      "code": "LLMF411",
+      "severity": "error",
+      "message": "comparison operands have incompatible types",
+      "file": "llmform.yaml",
+      "line": 13,
+      "column": 11,
+      "context": "on agent.support",
+      "hint": null,
+      "suggestion": null
+    },
+    {
+      "code": "LLMF411",
+      "severity": "error",
+      "message": "undefined field 'missing'",
+      "file": "llmform.yaml",
+      "line": 13,
+      "column": 17,
+      "context": "on agent.support",
+      "hint": null,
+      "suggestion": "message"
+    }
+  ],
+  "summary": {
+    "errors": 2,
+    "warnings": 0,
+    "total": 2,
+    "shown": 2,
+    "omitted": 0
+  }
+}

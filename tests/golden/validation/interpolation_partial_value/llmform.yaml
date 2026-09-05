@@ -1,0 +1,5 @@
+version: "0.1"
+providers:
+  local:
+    type: ollama
+    endpoint: prefix-${env.GOLDEN_VALUE}

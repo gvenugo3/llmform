@@ -1,0 +1,18 @@
+version: "0.1"
+providers:
+  local:
+    type: ollama
+    endpoint: http://localhost:11434
+models:
+  default:
+    provider: provider.local
+    id: llama3.2
+policies:
+  field_check:
+    on: request
+    rule: input.missing == true
+agents:
+  support:
+    model: model.default
+    instructions: prompts/support.md
+    policies: [policy.field_check]

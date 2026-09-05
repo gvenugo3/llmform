@@ -1,0 +1,1 @@
+value: ${env.MISSING_GOLDEN_VALUE}

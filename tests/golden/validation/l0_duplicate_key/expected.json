@@ -1,0 +1,22 @@
+{
+  "diagnostics": [
+    {
+      "code": "LLMF002",
+      "severity": "error",
+      "message": "duplicate key 'version'",
+      "file": "llmform.yaml",
+      "line": 2,
+      "column": 1,
+      "context": null,
+      "hint": "first declared at ./llmform.yaml:1:1",
+      "suggestion": null
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "warnings": 0,
+    "total": 1,
+    "shown": 1,
+    "omitted": 0
+  }
+}

@@ -1,0 +1,9 @@
+version: "0.1"
+providers:
+  local:
+    type: ollama
+    endpoint: http://localhost:11434
+models:
+  default:
+    provider: provider.missing
+    id: llama3.2

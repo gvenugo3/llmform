@@ -79,7 +79,8 @@ def resolve_interpolations(
     environ = os.environ if environ is None else environ
     secret_provider = secret_provider or EnvironmentSecretProvider(environ)
     variables: dict[str, Any] = {}
-    declarations = document.raw.get("variables", {})
+    raw_declarations = document.raw.get("variables", {})
+    declarations = raw_declarations if isinstance(raw_declarations, Mapping) else {}
     for name, declaration in declarations.items():
         if isinstance(declaration, dict) and declaration.get("default") is not None:
             variables[name] = declaration["default"]

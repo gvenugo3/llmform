@@ -1,0 +1,2 @@
+llmform.yaml:1:1: error [LLMF005]: configuration root must be a mapping
+Summary: 1 error, 0 warnings

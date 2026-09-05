@@ -52,6 +52,18 @@ audit:
     assert f"{path}:2:3" in (duplicate.hint or "")
 
 
+def test_recursive_yaml_alias_is_a_positioned_diagnostic(tmp_path) -> None:
+    path = tmp_path / "llmform.yaml"
+    path.write_text("value: &value [*value]\n", encoding="utf-8")
+
+    document = load_project(tmp_path)
+
+    diagnostic = next(item for item in document.diagnostics if item.code == "LLMF006")
+    assert diagnostic.message == "recursive YAML aliases are unsupported"
+    assert diagnostic.position.file == path
+    assert diagnostic.position.line == 1
+
+
 def test_source_round_trip_preserves_comments_order_and_spelling(tmp_path) -> None:
     text = """\
 # project comment

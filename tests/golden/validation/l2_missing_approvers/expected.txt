@@ -1,0 +1,4 @@
+llmform.yaml:4:5: warning [LLMF302]: policy.approval is not attached to any agent
+llmform.yaml:6:16: error [LLMF504]: policy.approval requires approval.approvers
+  hint: there is no implicit approver
+Summary: 1 error, 1 warning

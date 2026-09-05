@@ -1,0 +1,6 @@
+llmform.yaml:13:11: error [LLMF411]: comparison operands have incompatible types
+  on agent.support
+llmform.yaml:13:17: error [LLMF411]: undefined field 'missing'
+  on agent.support
+  did you mean 'message'?
+Summary: 2 errors, 0 warnings

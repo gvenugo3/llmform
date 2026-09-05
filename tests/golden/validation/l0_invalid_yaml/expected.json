@@ -1,0 +1,22 @@
+{
+  "diagnostics": [
+    {
+      "code": "LLMF001",
+      "severity": "error",
+      "message": "while parsing a flow node\nexpected the node content, but found '<stream end>'\n  in \"<unicode string>\", line 3, column 1:\n    \n    ^",
+      "file": "llmform.yaml",
+      "line": 3,
+      "column": 1,
+      "context": null,
+      "hint": null,
+      "suggestion": null
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "warnings": 0,
+    "total": 1,
+    "shown": 1,
+    "omitted": 0
+  }
+}

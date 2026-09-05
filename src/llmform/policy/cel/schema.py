@@ -8,6 +8,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from jsonschema import Draft202012Validator
+from jsonschema.exceptions import SchemaError
+
 from llmform.diagnostics import Diagnostic, Position, Severity
 from llmform.policy.cel.types import BOOL, DOUBLE, INT, STRING, CelKind, CelType, list_of
 
@@ -61,6 +64,10 @@ class SchemaCompiler:
         if not isinstance(self.schema, Mapping):
             self._error((), "schema must be a JSON object")
             return CompiledSchema(None, self.diagnostics)
+        try:
+            Draft202012Validator.check_schema(self.schema)
+        except SchemaError as exc:
+            self._error(tuple(exc.absolute_path), f"invalid JSON Schema: {exc.message}")
         result = self._compile_node(self.schema, ())
         definitions = self.schema.get("$defs", {})
         if isinstance(definitions, Mapping):
@@ -104,6 +111,8 @@ class SchemaCompiler:
         for keyword in node:
             if keyword not in allowed and keyword not in _UNSUPPORTED:
                 self._error(path + (keyword,), f"unsupported JSON Schema keyword {keyword!r}")
+        if declared_type != "string" and "enum" in node:
+            self._error(path + ("enum",), "enum is supported only for string schemas")
 
         self._validate_defs(node.get("$defs"), path)
         if declared_type == "object":

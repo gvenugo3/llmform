@@ -1,0 +1,6 @@
+version: "0.1"
+policies:
+  approval:
+    on: request
+    rule: "true"
+    otherwise: REQUIRE_APPROVAL

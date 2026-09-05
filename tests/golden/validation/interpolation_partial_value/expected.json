@@ -1,0 +1,22 @@
+{
+  "diagnostics": [
+    {
+      "code": "LLMF201",
+      "severity": "error",
+      "message": "interpolation must occupy the entire scalar value",
+      "file": "llmform.yaml",
+      "line": 5,
+      "column": 15,
+      "context": null,
+      "hint": null,
+      "suggestion": null
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "warnings": 0,
+    "total": 1,
+    "shown": 1,
+    "omitted": 0
+  }
+}

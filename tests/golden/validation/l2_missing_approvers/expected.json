@@ -1,0 +1,33 @@
+{
+  "diagnostics": [
+    {
+      "code": "LLMF302",
+      "severity": "warning",
+      "message": "policy.approval is not attached to any agent",
+      "file": "llmform.yaml",
+      "line": 4,
+      "column": 5,
+      "context": null,
+      "hint": null,
+      "suggestion": null
+    },
+    {
+      "code": "LLMF504",
+      "severity": "error",
+      "message": "policy.approval requires approval.approvers",
+      "file": "llmform.yaml",
+      "line": 6,
+      "column": 16,
+      "context": null,
+      "hint": "there is no implicit approver",
+      "suggestion": null
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "warnings": 1,
+    "total": 2,
+    "shown": 2,
+    "omitted": 0
+  }
+}

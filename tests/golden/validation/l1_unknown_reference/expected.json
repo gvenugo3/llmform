@@ -1,0 +1,44 @@
+{
+  "diagnostics": [
+    {
+      "code": "LLMF303",
+      "severity": "warning",
+      "message": "provider.local is unreachable",
+      "file": "llmform.yaml",
+      "line": 4,
+      "column": 5,
+      "context": null,
+      "hint": null,
+      "suggestion": null
+    },
+    {
+      "code": "LLMF303",
+      "severity": "warning",
+      "message": "model.default is unreachable",
+      "file": "llmform.yaml",
+      "line": 8,
+      "column": 5,
+      "context": null,
+      "hint": null,
+      "suggestion": null
+    },
+    {
+      "code": "LLMF300",
+      "severity": "error",
+      "message": "unknown reference provider.missing",
+      "file": "llmform.yaml",
+      "line": 8,
+      "column": 15,
+      "context": null,
+      "hint": null,
+      "suggestion": null
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "warnings": 2,
+    "total": 3,
+    "shown": 3,
+    "omitted": 0
+  }
+}
