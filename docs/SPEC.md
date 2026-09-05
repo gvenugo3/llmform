@@ -582,6 +582,23 @@ YAML, decoded via PyYAML **Node** trees using YAML 1.2 scalar semantics so every
 node carries `file:line:col`. In particular, the policy key `on` remains a string rather
 than the YAML 1.1 boolean value accepted by PyYAML's default loader.
 
+### 7.0 Project discovery and flat-file merge
+
+Starting from a file or directory, discovery walks toward the filesystem root and uses
+the nearest directory containing either `llmform.yaml` or a `*.llmform.yaml` fragment.
+Only files directly in that directory belong to the project; discovery does not recurse.
+
+If present, `llmform.yaml` loads first. All `*.llmform.yaml` fragments then load in
+lexical filename order. A fragments-only project is valid. Resource blocks merge by
+address, but declaring the same `<kind>.<name>` in two files is an error that cites both
+locations. Singleton top-level keys, including `version` and `audit`, may appear in only
+one file. There is no last-write-wins behavior.
+
+File order affects diagnostic ordering only. It cannot override a resource or change
+policy precedence; policy evaluation order comes exclusively from each agent's explicit
+`policies:` list. This is the flat v0.1 model—recursive includes and modules remain out
+of scope. See [D14](#d14--projects-use-nearest-root-flat-file-merging--2026-09-04).
+
 ### 7.1 Interpolation
 
 A closed, typed set resolved at load time:
@@ -897,6 +914,16 @@ default when omitted) is rejected. Treating undeclared properties as absent from
 type environment was rejected because the runtime contract would still admit data that
 the policy author could neither name nor type-check. Requiring closed objects makes the
 runtime validation boundary and policy type environment describe the same values.
+
+### D14 — Projects use nearest-root flat-file merging ✅ 2026-09-04
+
+Discovery and merge semantics are defined in §7.0. Both a conventional primary file and
+lexically ordered fragments are supported, including fragments-only projects. The
+nearest ancestor wins so a command run inside a nested project cannot accidentally load
+an outer project. Duplicate addresses and singleton keys fail with both source locations
+rather than overriding. Recursive discovery and explicit include order were rejected:
+the former makes project closure surprising, while the latter lets load order alter
+security-sensitive meaning.
 
 ### Still open
 

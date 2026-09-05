@@ -126,6 +126,7 @@ def _merge(
     diagnostics: list[Diagnostic],
 ) -> None:
     resource_blocks = {"variables", "providers", "models", "sources", "tools", "policies", "agents"}
+    rejected_prefixes: list[PathKey] = []
     for key, value in incoming.items():
         if key in resource_blocks and isinstance(value, dict):
             block = target.setdefault(key, {})
@@ -134,6 +135,7 @@ def _merge(
             for name, resource in value.items():
                 path = (key, name)
                 if name in block:
+                    rejected_prefixes.append(path)
                     first = positions.get(path)
                     diagnostics.append(
                         Diagnostic(
@@ -147,17 +149,25 @@ def _merge(
                     continue
                 block[name] = resource
         elif key in target:
+            rejected_prefixes.append((key,))
+            first = positions.get((key,))
             diagnostics.append(
                 Diagnostic(
                     "LLMF004",
                     Severity.ERROR,
                     f"top-level key {key!r} may be declared only once",
                     source_positions.get((key,), Position(file)),
+                    f"first declared at {first.display() if first else 'an earlier file'}",
                 )
             )
         else:
             target[key] = value
-    positions.update(source_positions)
+    for path, position in source_positions.items():
+        if any(path[: len(prefix)] == prefix for prefix in rejected_prefixes):
+            continue
+        # Shared block/root positions belong to the first file; positions for a newly
+        # accepted resource or field have no existing entry and are added normally.
+        positions.setdefault(path, position)
 
 
 def load_project(start: Path) -> ConfigDocument:
