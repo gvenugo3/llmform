@@ -617,6 +617,21 @@ No expressions, no functions, no concatenation into queries. `validate` and `pla
 print resolved secret values. Values from `${secret.*}` are additionally scrubbed from
 error messages and from audit payloads.
 
+Variables are declared before use and may be overridden with `--var NAME=VALUE`:
+
+```yaml
+variables:
+  retries:
+    type: integer       # string | integer | number | boolean; defaults to string
+    default: 3          # optional and validated against type
+    description: Maximum retry count
+    required: false     # when true, a default or --var value is required
+```
+
+CLI values are parsed according to the declared type. Undeclared overrides, missing
+required values, type mismatches, malformed forms, and partial-string interpolation are
+positioned L0 findings.
+
 ### 7.2 Lockfile
 
 `llmform.lock` pins the config closure:

@@ -9,9 +9,10 @@ from llmform import __version__
 from llmform.config.interpolation import resolve_interpolations
 from llmform.config.loader import attach_model_positions, load_project
 from llmform.config.models import ProjectConfig
+from llmform.config.schema import validate_config_schema
 from llmform.config.semantic import validate_semantics
 from llmform.config.validate import validate_references
-from llmform.diagnostics import exit_code, render_all, render_json
+from llmform.diagnostics import Severity, exit_code, render_all, render_json
 from llmform.policy.cel.compiler import validate_policy_rules
 from llmform.policy.cel.environment import validate_schema_profiles
 
@@ -45,22 +46,31 @@ def validate(
     """Validate an llmform project offline."""
     document = load_project(path or Path.cwd())
     diagnostics = list(document.diagnostics)
-    if document.config is not None:
+    if document.files and not any(item.severity == Severity.ERROR for item in diagnostics):
         resolved, interpolation_diagnostics, scrubber = resolve_interpolations(
             document, _parse_variables(variable or [])
         )
         diagnostics.extend(interpolation_diagnostics)
         if not interpolation_diagnostics:
             try:
-                document.config = ProjectConfig.model_validate(resolved)
-                attach_model_positions(document.config, document)
-            except Exception as exc:  # pragma: no cover - interpolation type errors are unusual
+                diagnostics.extend(
+                    validate_config_schema(
+                        resolved,
+                        document.positions,
+                        document.key_positions,
+                        document.position(()),
+                    )
+                )
+                if not any(item.severity == Severity.ERROR for item in diagnostics):
+                    document.config = ProjectConfig.model_validate(resolved)
+                    attach_model_positions(document.config, document)
+                    diagnostics.extend(validate_references(document))
+                    diagnostics.extend(validate_schema_profiles(document))
+                    diagnostics.extend(validate_policy_rules(document))
+                    diagnostics.extend(validate_semantics(document))
+            except Exception as exc:  # Last-resort boundary prevents resolved-secret leakage.
                 typer.echo(scrubber.scrub(str(exc)), err=True)
                 raise typer.Exit(1) from None
-            diagnostics.extend(validate_references(document))
-            diagnostics.extend(validate_schema_profiles(document))
-            diagnostics.extend(validate_policy_rules(document))
-            diagnostics.extend(validate_semantics(document))
     else:
         scrubber = None
 

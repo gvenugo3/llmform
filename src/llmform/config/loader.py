@@ -14,6 +14,7 @@ from llmform.config.models import FieldLocation, ProjectConfig, StrictModel
 from llmform.diagnostics import Diagnostic, Position, Severity
 
 PathKey = tuple[str | int, ...]
+INTERPOLATION_VALUE = re.compile(r"^\$\{(?:env|var|secret)\.[A-Za-z_][A-Za-z0-9_]*\}$")
 
 
 class LlmformLoader(yaml.SafeLoader):
@@ -238,6 +239,14 @@ def _merge(
         key_positions.setdefault(path, position)
 
 
+def _contains_interpolation(value: Any) -> bool:
+    if isinstance(value, dict):
+        return any(_contains_interpolation(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_contains_interpolation(item) for item in value)
+    return isinstance(value, str) and INTERPOLATION_VALUE.fullmatch(value) is not None
+
+
 def load_project(start: Path) -> ConfigDocument:
     root = find_project_root(start)
     if root is None:
@@ -304,7 +313,10 @@ def load_project(start: Path) -> ConfigDocument:
         )
 
     config: ProjectConfig | None = None
-    if not any(item.severity == Severity.ERROR for item in diagnostics):
+    pending_interpolation = _contains_interpolation(raw)
+    if not pending_interpolation and not any(
+        item.severity == Severity.ERROR for item in diagnostics
+    ):
         # Imported lazily to avoid a loader/schema import cycle around PathKey.
         from llmform.config.schema import validate_config_schema
 
@@ -316,7 +328,9 @@ def load_project(start: Path) -> ConfigDocument:
                 Position(files[0]),
             )
         )
-    if not any(item.severity == Severity.ERROR for item in diagnostics):
+    if not pending_interpolation and not any(
+        item.severity == Severity.ERROR for item in diagnostics
+    ):
         try:
             config = ProjectConfig.model_validate(raw)
         except ValidationError as exc:
