@@ -305,6 +305,18 @@ def load_project(start: Path) -> ConfigDocument:
 
     config: ProjectConfig | None = None
     if not any(item.severity == Severity.ERROR for item in diagnostics):
+        # Imported lazily to avoid a loader/schema import cycle around PathKey.
+        from llmform.config.schema import validate_config_schema
+
+        diagnostics.extend(
+            validate_config_schema(
+                raw,
+                positions,
+                key_positions,
+                Position(files[0]),
+            )
+        )
+    if not any(item.severity == Severity.ERROR for item in diagnostics):
         try:
             config = ProjectConfig.model_validate(raw)
         except ValidationError as exc:

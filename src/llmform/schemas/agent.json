@@ -1,0 +1,100 @@
+{
+  "$id": "https://llmform.dev/schemas/v0.1/agent.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "default_tool_posture": {
+      "default": "allow",
+      "enum": [
+        "allow",
+        "deny"
+      ],
+      "title": "Default Tool Posture",
+      "type": "string"
+    },
+    "input": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Input"
+    },
+    "instructions": {
+      "title": "Instructions",
+      "type": "string"
+    },
+    "max_cost_usd": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Cost Usd"
+    },
+    "max_elapsed": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Elapsed"
+    },
+    "max_iterations": {
+      "default": 8,
+      "exclusiveMinimum": 0,
+      "title": "Max Iterations",
+      "type": "integer"
+    },
+    "model": {
+      "title": "Model",
+      "type": "string"
+    },
+    "output": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Output"
+    },
+    "policies": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Policies",
+      "type": "array"
+    },
+    "tools": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Tools",
+      "type": "array"
+    }
+  },
+  "required": [
+    "model",
+    "instructions"
+  ],
+  "title": "Agent",
+  "type": "object",
+  "x-llmform-schema-version": "0.1"
+}

@@ -582,6 +582,13 @@ YAML, decoded via PyYAML **Node** trees using YAML 1.2 scalar semantics so every
 node carries `file:line:col`. In particular, the policy key `on` remains a string rather
 than the YAML 1.1 boolean value accepted by PyYAML's default loader.
 
+The v0.1 configuration grammar is published as Draft 2020-12 JSON Schemas under
+`llmform.schemas`: one artifact for each of the six resource kinds, plus variables and
+the top-level project. Every artifact carries `x-llmform-schema-version: "0.1"`; this is
+the schema version recorded by the lockfile. The committed artifacts are generated from
+the strict typed models with `python scripts/generate_config_schemas.py`, while runtime
+validation reads only the packaged artifacts and remains fully offline.
+
 ### 7.0 Project discovery and flat-file merge
 
 Starting from a file or directory, discovery walks toward the filesystem root and uses

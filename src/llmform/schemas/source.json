@@ -1,0 +1,259 @@
+{
+  "$defs": {
+    "HttpAuth": {
+      "additionalProperties": false,
+      "properties": {
+        "password": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Password"
+        },
+        "token": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Token"
+        },
+        "type": {
+          "enum": [
+            "bearer",
+            "basic"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "username": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Username"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "HttpAuth",
+      "type": "object"
+    },
+    "HttpOperation": {
+      "additionalProperties": false,
+      "properties": {
+        "classes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Classes",
+          "type": "array"
+        },
+        "method": {
+          "enum": [
+            "GET",
+            "HEAD",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": {
+            "$ref": "#/$defs/OperationParameter"
+          },
+          "title": "Params",
+          "type": "object"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "returns": {
+          "title": "Returns",
+          "type": "string"
+        }
+      },
+      "required": [
+        "method",
+        "path",
+        "returns"
+      ],
+      "title": "HttpOperation",
+      "type": "object"
+    },
+    "HttpSource": {
+      "additionalProperties": false,
+      "properties": {
+        "auth": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HttpAuth"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "base_url": {
+          "title": "Base Url",
+          "type": "string"
+        },
+        "operations": {
+          "additionalProperties": {
+            "$ref": "#/$defs/HttpOperation"
+          },
+          "title": "Operations",
+          "type": "object"
+        },
+        "type": {
+          "const": "http",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "base_url",
+        "operations"
+      ],
+      "title": "HttpSource",
+      "type": "object"
+    },
+    "McpOperation": {
+      "additionalProperties": false,
+      "properties": {
+        "classes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Classes",
+          "type": "array"
+        },
+        "params": {
+          "additionalProperties": {
+            "$ref": "#/$defs/OperationParameter"
+          },
+          "title": "Params",
+          "type": "object"
+        },
+        "read_only": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Read Only"
+        },
+        "returns": {
+          "title": "Returns",
+          "type": "string"
+        }
+      },
+      "required": [
+        "returns"
+      ],
+      "title": "McpOperation",
+      "type": "object"
+    },
+    "McpSource": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Command",
+          "type": "array"
+        },
+        "operations": {
+          "additionalProperties": {
+            "$ref": "#/$defs/McpOperation"
+          },
+          "title": "Operations",
+          "type": "object"
+        },
+        "type": {
+          "const": "mcp",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "command",
+        "operations"
+      ],
+      "title": "McpSource",
+      "type": "object"
+    },
+    "OperationParameter": {
+      "additionalProperties": false,
+      "properties": {
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "type": {
+          "enum": [
+            "string",
+            "integer",
+            "number",
+            "boolean",
+            "object",
+            "array"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "OperationParameter",
+      "type": "object"
+    }
+  },
+  "$id": "https://llmform.dev/schemas/v0.1/source.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "discriminator": {
+    "mapping": {
+      "http": "#/$defs/HttpSource",
+      "mcp": "#/$defs/McpSource"
+    },
+    "propertyName": "type"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/HttpSource"
+    },
+    {
+      "$ref": "#/$defs/McpSource"
+    }
+  ],
+  "x-llmform-schema-version": "0.1"
+}

@@ -1,0 +1,847 @@
+{
+  "$defs": {
+    "Agent": {
+      "additionalProperties": false,
+      "properties": {
+        "default_tool_posture": {
+          "default": "allow",
+          "enum": [
+            "allow",
+            "deny"
+          ],
+          "title": "Default Tool Posture",
+          "type": "string"
+        },
+        "input": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input"
+        },
+        "instructions": {
+          "title": "Instructions",
+          "type": "string"
+        },
+        "max_cost_usd": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Cost Usd"
+        },
+        "max_elapsed": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Elapsed"
+        },
+        "max_iterations": {
+          "default": 8,
+          "exclusiveMinimum": 0,
+          "title": "Max Iterations",
+          "type": "integer"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "output": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output"
+        },
+        "policies": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Policies",
+          "type": "array"
+        },
+        "tools": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tools",
+          "type": "array"
+        }
+      },
+      "required": [
+        "model",
+        "instructions"
+      ],
+      "title": "Agent",
+      "type": "object"
+    },
+    "Approval": {
+      "additionalProperties": false,
+      "properties": {
+        "approvers": {
+          "minLength": 1,
+          "title": "Approvers",
+          "type": "string"
+        }
+      },
+      "required": [
+        "approvers"
+      ],
+      "title": "Approval",
+      "type": "object"
+    },
+    "Audit": {
+      "additionalProperties": false,
+      "properties": {
+        "record_payloads": {
+          "default": false,
+          "title": "Record Payloads",
+          "type": "boolean"
+        }
+      },
+      "title": "Audit",
+      "type": "object"
+    },
+    "HttpAuth": {
+      "additionalProperties": false,
+      "properties": {
+        "password": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Password"
+        },
+        "token": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Token"
+        },
+        "type": {
+          "enum": [
+            "bearer",
+            "basic"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "username": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Username"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "HttpAuth",
+      "type": "object"
+    },
+    "HttpOperation": {
+      "additionalProperties": false,
+      "properties": {
+        "classes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Classes",
+          "type": "array"
+        },
+        "method": {
+          "enum": [
+            "GET",
+            "HEAD",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": {
+            "$ref": "#/$defs/OperationParameter"
+          },
+          "title": "Params",
+          "type": "object"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "returns": {
+          "title": "Returns",
+          "type": "string"
+        }
+      },
+      "required": [
+        "method",
+        "path",
+        "returns"
+      ],
+      "title": "HttpOperation",
+      "type": "object"
+    },
+    "HttpSource": {
+      "additionalProperties": false,
+      "properties": {
+        "auth": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HttpAuth"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "base_url": {
+          "title": "Base Url",
+          "type": "string"
+        },
+        "operations": {
+          "additionalProperties": {
+            "$ref": "#/$defs/HttpOperation"
+          },
+          "title": "Operations",
+          "type": "object"
+        },
+        "type": {
+          "const": "http",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "base_url",
+        "operations"
+      ],
+      "title": "HttpSource",
+      "type": "object"
+    },
+    "Match": {
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "operation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Operation"
+        },
+        "provider": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source"
+        },
+        "tool": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tool"
+        }
+      },
+      "title": "Match",
+      "type": "object"
+    },
+    "McpOperation": {
+      "additionalProperties": false,
+      "properties": {
+        "classes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Classes",
+          "type": "array"
+        },
+        "params": {
+          "additionalProperties": {
+            "$ref": "#/$defs/OperationParameter"
+          },
+          "title": "Params",
+          "type": "object"
+        },
+        "read_only": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Read Only"
+        },
+        "returns": {
+          "title": "Returns",
+          "type": "string"
+        }
+      },
+      "required": [
+        "returns"
+      ],
+      "title": "McpOperation",
+      "type": "object"
+    },
+    "McpSource": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Command",
+          "type": "array"
+        },
+        "operations": {
+          "additionalProperties": {
+            "$ref": "#/$defs/McpOperation"
+          },
+          "title": "Operations",
+          "type": "object"
+        },
+        "type": {
+          "const": "mcp",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "command",
+        "operations"
+      ],
+      "title": "McpSource",
+      "type": "object"
+    },
+    "Model": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "max_tokens": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Tokens"
+        },
+        "price": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Price"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "provider": {
+          "title": "Provider",
+          "type": "string"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Temperature"
+        }
+      },
+      "required": [
+        "provider",
+        "id"
+      ],
+      "title": "Model",
+      "type": "object"
+    },
+    "OperationParameter": {
+      "additionalProperties": false,
+      "properties": {
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "type": {
+          "enum": [
+            "string",
+            "integer",
+            "number",
+            "boolean",
+            "object",
+            "array"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "OperationParameter",
+      "type": "object"
+    },
+    "Policy": {
+      "additionalProperties": false,
+      "properties": {
+        "approval": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Approval"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "match": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Match"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "on": {
+          "enum": [
+            "request",
+            "model_call",
+            "tool_call",
+            "tool_result",
+            "response",
+            "loop"
+          ],
+          "title": "On",
+          "type": "string"
+        },
+        "otherwise": {
+          "default": "DENY",
+          "enum": [
+            "ALLOW",
+            "DENY",
+            "REQUIRE_APPROVAL"
+          ],
+          "title": "Otherwise",
+          "type": "string"
+        },
+        "rule": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rule"
+        },
+        "transform": {
+          "items": {
+            "$ref": "#/$defs/Transform"
+          },
+          "title": "Transform",
+          "type": "array"
+        }
+      },
+      "required": [
+        "on"
+      ],
+      "title": "Policy",
+      "type": "object"
+    },
+    "Price": {
+      "additionalProperties": false,
+      "properties": {
+        "currency": {
+          "default": "USD",
+          "title": "Currency",
+          "type": "string"
+        },
+        "input_per_mtok": {
+          "title": "Input Per Mtok",
+          "type": "number"
+        },
+        "output_per_mtok": {
+          "title": "Output Per Mtok",
+          "type": "number"
+        }
+      },
+      "required": [
+        "input_per_mtok",
+        "output_per_mtok"
+      ],
+      "title": "Price",
+      "type": "object"
+    },
+    "Provider": {
+      "additionalProperties": false,
+      "properties": {
+        "api_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Api Key"
+        },
+        "endpoint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Endpoint"
+        },
+        "type": {
+          "enum": [
+            "openai",
+            "ollama"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "Provider",
+      "type": "object"
+    },
+    "Tool": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "detokenize": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Detokenize",
+          "type": "array"
+        },
+        "input": {
+          "title": "Input",
+          "type": "string"
+        },
+        "operation": {
+          "title": "Operation",
+          "type": "string"
+        },
+        "output": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output"
+        },
+        "retries": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Retries",
+          "type": "integer"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "timeout": {
+          "default": "30s",
+          "title": "Timeout",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "operation",
+        "description",
+        "input"
+      ],
+      "title": "Tool",
+      "type": "object"
+    },
+    "Transform": {
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Fields",
+          "type": "array"
+        },
+        "kind": {
+          "enum": [
+            "redact",
+            "tokenize"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "fields"
+      ],
+      "title": "Transform",
+      "type": "object"
+    },
+    "Variable": {
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "type": {
+          "default": "string",
+          "enum": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "title": "Variable",
+      "type": "object"
+    }
+  },
+  "$id": "https://llmform.dev/schemas/v0.1/project.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "agents": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Agent"
+      },
+      "title": "Agents",
+      "type": "object"
+    },
+    "audit": {
+      "$ref": "#/$defs/Audit"
+    },
+    "models": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Model"
+      },
+      "title": "Models",
+      "type": "object"
+    },
+    "policies": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Policy"
+      },
+      "title": "Policies",
+      "type": "object"
+    },
+    "providers": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Provider"
+      },
+      "title": "Providers",
+      "type": "object"
+    },
+    "sources": {
+      "additionalProperties": {
+        "discriminator": {
+          "mapping": {
+            "http": "#/$defs/HttpSource",
+            "mcp": "#/$defs/McpSource"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/HttpSource"
+          },
+          {
+            "$ref": "#/$defs/McpSource"
+          }
+        ]
+      },
+      "title": "Sources",
+      "type": "object"
+    },
+    "tools": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Tool"
+      },
+      "title": "Tools",
+      "type": "object"
+    },
+    "variables": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Variable"
+      },
+      "title": "Variables",
+      "type": "object"
+    },
+    "version": {
+      "const": "0.1",
+      "default": "0.1",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "title": "ProjectConfig",
+  "type": "object",
+  "x-llmform-schema-version": "0.1"
+}

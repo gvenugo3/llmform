@@ -1,0 +1,59 @@
+{
+  "$id": "https://llmform.dev/schemas/v0.1/variable.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "default": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Default"
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Description"
+    },
+    "required": {
+      "default": false,
+      "title": "Required",
+      "type": "boolean"
+    },
+    "type": {
+      "default": "string",
+      "enum": [
+        "string",
+        "integer",
+        "number",
+        "boolean"
+      ],
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "title": "Variable",
+  "type": "object",
+  "x-llmform-schema-version": "0.1"
+}

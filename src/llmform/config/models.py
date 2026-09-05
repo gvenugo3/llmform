@@ -178,7 +178,7 @@ class Audit(StrictModel):
 
 
 class ProjectConfig(StrictModel):
-    version: str = "0.1"
+    version: Literal["0.1"] = "0.1"
     variables: dict[str, Variable] = Field(default_factory=dict)
     providers: dict[str, Provider] = Field(default_factory=dict)
     models: dict[str, Model] = Field(default_factory=dict)

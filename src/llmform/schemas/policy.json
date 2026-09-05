@@ -1,0 +1,186 @@
+{
+  "$defs": {
+    "Approval": {
+      "additionalProperties": false,
+      "properties": {
+        "approvers": {
+          "minLength": 1,
+          "title": "Approvers",
+          "type": "string"
+        }
+      },
+      "required": [
+        "approvers"
+      ],
+      "title": "Approval",
+      "type": "object"
+    },
+    "Match": {
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "operation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Operation"
+        },
+        "provider": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source"
+        },
+        "tool": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tool"
+        }
+      },
+      "title": "Match",
+      "type": "object"
+    },
+    "Transform": {
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Fields",
+          "type": "array"
+        },
+        "kind": {
+          "enum": [
+            "redact",
+            "tokenize"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "fields"
+      ],
+      "title": "Transform",
+      "type": "object"
+    }
+  },
+  "$id": "https://llmform.dev/schemas/v0.1/policy.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "approval": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Approval"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "match": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Match"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "on": {
+      "enum": [
+        "request",
+        "model_call",
+        "tool_call",
+        "tool_result",
+        "response",
+        "loop"
+      ],
+      "title": "On",
+      "type": "string"
+    },
+    "otherwise": {
+      "default": "DENY",
+      "enum": [
+        "ALLOW",
+        "DENY",
+        "REQUIRE_APPROVAL"
+      ],
+      "title": "Otherwise",
+      "type": "string"
+    },
+    "rule": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Rule"
+    },
+    "transform": {
+      "items": {
+        "$ref": "#/$defs/Transform"
+      },
+      "title": "Transform",
+      "type": "array"
+    }
+  },
+  "required": [
+    "on"
+  ],
+  "title": "Policy",
+  "type": "object",
+  "x-llmform-schema-version": "0.1"
+}

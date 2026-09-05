@@ -1,0 +1,62 @@
+{
+  "$id": "https://llmform.dev/schemas/v0.1/tool.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "description": {
+      "title": "Description",
+      "type": "string"
+    },
+    "detokenize": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Detokenize",
+      "type": "array"
+    },
+    "input": {
+      "title": "Input",
+      "type": "string"
+    },
+    "operation": {
+      "title": "Operation",
+      "type": "string"
+    },
+    "output": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Output"
+    },
+    "retries": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Retries",
+      "type": "integer"
+    },
+    "source": {
+      "title": "Source",
+      "type": "string"
+    },
+    "timeout": {
+      "default": "30s",
+      "title": "Timeout",
+      "type": "string"
+    }
+  },
+  "required": [
+    "source",
+    "operation",
+    "description",
+    "input"
+  ],
+  "title": "Tool",
+  "type": "object",
+  "x-llmform-schema-version": "0.1"
+}
