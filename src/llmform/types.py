@@ -114,3 +114,7 @@ class RunState(PublicModel):
     cost_usd: float = Field(default=0.0, ge=0)
     elapsed: timedelta = Field(default=timedelta(0))
     pending: PendingApproval | None = None
+    status: Literal["running", "suspended", "completed", "failed", "denied"] = "running"
+    failure: str | None = None
+    result: JsonValue | None = None
+    audit_seq: int = Field(default=0, ge=0)

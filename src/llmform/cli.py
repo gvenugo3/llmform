@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Annotated
 
@@ -19,6 +20,11 @@ from llmform.diagnostics import Diagnostic, Position, Severity, exit_code, rende
 from llmform.lock import LOCK_NAME, diff_lock, write_lock
 from llmform.policy.cel.compiler import validate_policy_rules
 from llmform.policy.cel.environment import validate_schema_profiles
+from llmform.providers.http import OllamaProvider, OpenAIProvider
+from llmform.runtime import Loop
+from llmform.sources.http import HttpOperationSource
+from llmform.sources.mcp import McpSource
+from llmform.types import Principal
 
 app = typer.Typer(no_args_is_help=True, pretty_exceptions_enable=False)
 
@@ -169,6 +175,94 @@ def lock(
         typer.echo(render_all(diagnostics, document.root))
     if code := exit_code(diagnostics):
         raise typer.Exit(code)
+
+
+@app.command()
+def run(
+    agent: Annotated[str, typer.Argument(help="Agent name")],
+    path: Annotated[Path | None, typer.Option("--path", help="Project file or directory")] = None,
+    input_text: Annotated[str | None, typer.Option("--input", help="User input")] = None,
+    input_file: Annotated[
+        Path | None, typer.Option("--input-file", help="File containing input")
+    ] = None,
+    principal: Annotated[str | None, typer.Option("--principal", help="JSON principal")] = None,
+    trust_sources: Annotated[bool, typer.Option("--trust-sources")] = False,
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Execute an agent locally with runtime policy enforcement."""
+    document = load_project(path or Path.cwd())
+    if document.config is None or document.diagnostics:
+        typer.echo(render_all(document.diagnostics, document.root), err=True)
+        raise typer.Exit(1)
+    agent_name = agent.removeprefix("agent.")
+    if agent_name not in document.config.agents:
+        raise typer.BadParameter(f"unknown agent {agent!r}")
+    if input_text is not None and input_file is not None:
+        raise typer.BadParameter("use only one of --input or --input-file")
+    text = (
+        input_text
+        if input_text is not None
+        else (input_file.read_text() if input_file else typer.get_text_stream("stdin").read())
+    )
+    actor = (
+        Principal.model_validate_json(principal)
+        if principal
+        else Principal(id="developer", role="developer")
+    )
+    model = document.config.models[document.config.agents[agent_name].model.removeprefix("model.")]
+    provider_config = document.config.providers[model.provider.removeprefix("provider.")]
+    if provider_config.type == "openai":
+        if not provider_config.api_key:
+            raise typer.BadParameter("OpenAI provider requires api_key")
+        provider = OpenAIProvider(
+            provider_config.api_key,
+            provider_config.endpoint or "https://api.openai.com/v1/responses",
+        )
+    else:
+        provider = OllamaProvider(provider_config.endpoint or "http://localhost:11434/api/chat")
+    schemas: dict[str, dict] = {}
+    for source in document.config.sources.values():
+        for operation in source.operations.values():
+            schemas[operation.returns] = json.loads((document.root / operation.returns).read_text())
+    sources = {}
+    mcp_sources = [source for source in document.config.sources.values() if source.type == "mcp"]
+    if mcp_sources:
+        try:
+            lock_changed = "sources" in diff_lock(document)
+        except (OSError, ValueError):
+            lock_changed = True
+        if lock_changed and not trust_sources:
+            raise typer.BadParameter(
+                "MCP argv is not recorded in llmform.lock; review it and use --trust-sources"
+            )
+        if lock_changed:
+            write_lock(document)
+    for name, source in document.config.sources.items():
+        if source.type == "http":
+            sources[name] = HttpOperationSource(source, schemas)
+        else:
+            sources[name] = McpSource(source.command, trusted=trust_sources)
+    loop = Loop(document, provider, sources, audit_path=document.root / "llmform.audit.jsonl")
+    state = loop.start(agent_name, actor, text)
+    while state.status in {"running", "suspended"}:
+        if state.pending:
+            typer.echo(
+                f"Approval required by {state.pending.policy}: {state.pending.approvers}", err=True
+            )
+            state = loop.step(state, approved=typer.confirm("Approve this action?", default=False))
+        else:
+            state = loop.step(state)
+    for source in sources.values():
+        if isinstance(source, McpSource):
+            source.close()
+    if json_output:
+        typer.echo(state.model_dump_json())
+    elif state.status == "completed":
+        typer.echo(state.result)
+    else:
+        typer.echo(f"{state.status}: {state.failure}", err=True)
+    if state.status != "completed":
+        raise typer.Exit(1)
 
 
 @app.command()

@@ -69,5 +69,9 @@
         "amount_cents": 12500
       }
     }
-  }
+  },
+  "status": "running",
+  "failure": null,
+  "result": null,
+  "audit_seq": 0
 }
