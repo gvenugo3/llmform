@@ -12,6 +12,10 @@ TOKEN_PREFIX = "{{llmform:token:"
 TOKEN_SUFFIX = "}}"
 
 
+class TransformError(ValueError):
+    """A declared transform cannot be applied to the payload at its hook."""
+
+
 class Origin(StrEnum):
     REQUEST = "request"
     TOOL_RESULT = "tool_result"
@@ -58,6 +62,9 @@ def transform(
 ) -> dict[str, Any]:
     """Apply a declared transform to named top-level fields without mutating input."""
 
+    if not isinstance(payload, dict):
+        # Fail closed: passing an unrecognized shape through would leak the plaintext.
+        raise TransformError(f"{kind} requires an object payload, not {type(payload).__name__}")
     result = dict(payload)
     for field in fields:
         if field not in result:
@@ -65,7 +72,11 @@ def transform(
         if kind == "redact":
             result[field] = REDACTION_MARKER
         elif kind == "tokenize":
-            result[field] = vault.put(run_id, str(result[field]), origin)
+            value = str(result[field])
+            # A value that is already this run's token stays as it is; wrapping it again
+            # would hide the original origin behind a token-of-a-token.
+            if vault.resolve(run_id, value) is None:
+                result[field] = vault.put(run_id, value, origin)
         else:
             raise ValueError(f"unknown transform kind {kind!r}")
     return result

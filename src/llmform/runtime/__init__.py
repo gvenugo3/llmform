@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -13,10 +14,24 @@ from jsonschema import validate
 
 from llmform.audit import AuditLog
 from llmform.config.loader import ConfigDocument
-from llmform.policy.engine import DispatchResult, PolicyEngine
+from llmform.config.models import Agent, Transform
+from llmform.policy.engine import DispatchResult, PolicyEngine, TransformStager
+from llmform.policy.transforms import InMemoryTokenVault, Origin, TransformError, detokenize
+from llmform.policy.transforms import transform as apply_transform
 from llmform.providers import Provider, ToolDefinition
 from llmform.sources import Source
-from llmform.types import Hook, Message, PendingApproval, Principal, RunState, ToolResult, Verdict
+from llmform.types import (
+    Hook,
+    Message,
+    PendingApproval,
+    Principal,
+    RecordedOutcome,
+    RunState,
+    ToolResult,
+    Verdict,
+)
+
+TERMINAL = {"completed", "failed", "denied"}
 
 
 class MemoryStore:
@@ -49,6 +64,7 @@ class Loop:
         sources: dict[str, Source],
         *,
         audit_path: Path | None = None,
+        vault: InMemoryTokenVault | None = None,
     ):
         if document.config is None:
             raise ValueError("loop requires validated project")
@@ -60,7 +76,8 @@ class Loop:
         )
         self.audit_path = audit_path
         self.logs: dict[str, AuditLog] = {}
-        self.engine = PolicyEngine(document, cel, lambda kind, payload: lambda: payload)
+        self.vault = vault or InMemoryTokenVault()
+        self.engine = PolicyEngine(document, cel, _unbound_stage)
 
     def start(self, agent: str, principal: Principal, text: str) -> RunState:
         from llmform.lock import build_lock
@@ -70,11 +87,72 @@ class Loop:
             closure=build_lock(self.document)["closure_sha256"],
             agent=agent.removeprefix("agent."),
             principal=principal,
-            messages=[Message(role="user", content=text)],
         )
         self.logs[state.run_id] = AuditLog(
             state.run_id, record_payloads=self.config.audit.record_payloads, path=self.audit_path
         )
+        payload = _request_payload(self.config.agents[state.agent], text)
+        try:
+            request = self.engine.dispatch(
+                state.agent,
+                Hook.REQUEST,
+                payload,
+                {
+                    "principal": principal.model_dump(),
+                    "input": payload,
+                    "agent": {"name": state.agent},
+                    "run": {"id": state.run_id, "iteration": 0, "cost_usd": 0.0},
+                },
+                stage=self._stager(state.run_id, Origin.REQUEST),
+            )
+        except TransformError as exc:
+            failed = {"status": "failed", "failure": f"transform failed: {exc}"}
+            return self._finish(state.model_copy(update=failed))
+        self._record_dispatch(state, Hook.REQUEST, request, payload)
+        if failure := _unsupported_block(request, "request"):
+            return self._finish(state.model_copy(update={"status": "denied", "failure": failure}))
+        admitted = request.payload
+        content = admitted["message"] if set(admitted) == {"message"} else json.dumps(admitted)
+        return state.model_copy(update={"messages": [Message(role="user", content=content)]})
+
+    def _stager(self, run_id: str, origin: Origin) -> TransformStager:
+        """Bind declared transforms to this run's vault and the payload's origin."""
+
+        def stage(declared: Transform) -> Callable[[Any], Any]:
+            def commit(payload: Any) -> Any:
+                return apply_transform(
+                    payload, declared.fields, declared.kind, self.vault, run_id, origin
+                )
+
+            return commit
+
+        return stage
+
+    def _message_stager(self, run_id: str) -> TransformStager:
+        """Apply model_call transforms to each message bound for the provider."""
+
+        def stage(declared: Transform) -> Callable[[Any], Any]:
+            def commit(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+                return [
+                    apply_transform(
+                        message,
+                        declared.fields,
+                        declared.kind,
+                        self.vault,
+                        run_id,
+                        Origin.REQUEST if message.get("role") == "user" else Origin.TOOL_RESULT,
+                    )
+                    for message in messages
+                ]
+
+            return commit
+
+        return stage
+
+    def _finish(self, state: RunState) -> RunState:
+        # The v0.1 vault is in memory; a terminal run can never resolve its tokens again.
+        if state.status in TERMINAL:
+            self.vault.purge(state.run_id)
         return state
 
     def _audit(self, state: RunState) -> AuditLog:
@@ -103,6 +181,8 @@ class Loop:
                 rule=policy.rule,
                 payload=payload,
             )
+            if result.verdict != RecordedOutcome.TRANSFORM:
+                continue
             for transform in policy.transform:
                 self._audit(state).append(
                     "transform",
@@ -112,7 +192,15 @@ class Loop:
                     fields=transform.fields,
                 )
 
-    def step(self, state: RunState, *, approved: bool | None = None) -> RunState:  # noqa: C901
+    def step(self, state: RunState, *, approved: bool | None = None) -> RunState:
+        try:
+            result = self._step(state, approved=approved)
+        except TransformError as exc:
+            failed = {"status": "failed", "failure": f"transform failed: {exc}"}
+            result = state.model_copy(update=failed)
+        return self._finish(result)
+
+    def _step(self, state: RunState, *, approved: bool | None = None) -> RunState:  # noqa: C901
         if state.status not in {"running", "suspended"}:
             return state
         from llmform.lock import build_lock
@@ -167,6 +255,7 @@ class Loop:
                 "cost_usd": state.cost_usd,
                 "principal": state.principal.model_dump(),
             },
+            stage=self._stager(state.run_id, Origin.TOOL_RESULT),
         )
         self._record_dispatch(state, Hook.LOOP, loop_result, {})
         if loop_result.verdict == Verdict.DENY:
@@ -179,12 +268,16 @@ class Loop:
                 return state.model_copy(
                     update={"status": "failed", "failure": "max_cost_usd would be exceeded"}
                 )
+        outbound = [message.model_dump(mode="json") for message in state.messages]
         call = self.engine.dispatch_model_call(
-            state.agent, state, state.messages, {"id": model.id, "provider": model.provider}
+            state.agent,
+            state,
+            outbound,
+            {"id": model.id, "provider": model.provider},
+            stage=self._message_stager(state.run_id),
+            approved=approved_policy,
         )
-        self._record_dispatch(state, Hook.MODEL_CALL, call, state.messages)
-        if call.verdict == Verdict.REQUIRE_APPROVAL and call.policies[-1] == approved_policy:
-            call = call.__class__(Verdict.ALLOW, call.payload, call.policies)
+        self._record_dispatch(state, Hook.MODEL_CALL, call, outbound)
         if call.verdict == Verdict.REQUIRE_APPROVAL:
             policy = call.policies[-1]
             definition = self.config.policies[policy]
@@ -215,7 +308,8 @@ class Loop:
             )
             for name in agent.tools
         ]
-        completion = self.provider.complete(state.messages, model=model.id, tools=definitions)
+        provider_messages = [Message.model_validate(message) for message in call.payload]
+        completion = self.provider.complete(provider_messages, model=model.id, tools=definitions)
         price = model.price
         cost = (
             0.0
@@ -243,39 +337,54 @@ class Loop:
                     return state.model_copy(
                         update={"status": "failed", "failure": f"output contract failed: {exc}"}
                     )
+            draft = result if isinstance(result, dict) else {"text": result}
             response = self.engine.dispatch(
-                state.agent, Hook.RESPONSE, result, {"principal": state.principal.model_dump()}
+                state.agent,
+                Hook.RESPONSE,
+                draft,
+                {"principal": state.principal.model_dump(), "draft": draft},
+                stage=self._stager(state.run_id, Origin.TOOL_RESULT),
             )
-            self._record_dispatch(state, Hook.RESPONSE, response, result)
-            if response.verdict == Verdict.DENY:
-                return state.model_copy(
-                    update={
-                        "status": "denied",
-                        "failure": f"policy {response.policies[-1]} denied response",
-                    }
-                )
+            self._record_dispatch(state, Hook.RESPONSE, response, draft)
+            if failure := _unsupported_block(response, "response"):
+                return state.model_copy(update={"status": "denied", "failure": failure})
+            released = detokenize(
+                response.payload, list(response.payload), self.vault, state.run_id, caller=True
+            )
+            result = released if isinstance(result, dict) else released["text"]
             return state.model_copy(update={"status": "completed", "result": result})
         results: list[ToolResult] = []
         for call in completion.message.tool_calls:
             tool = self.config.tools[call.name]
+            context = {
+                "tool": call.name,
+                "source": tool.source.removeprefix("source."),
+                "operation": tool.operation,
+                "principal": state.principal.model_dump(),
+            }
             for attempt in range(tool.retries + 1):
-                tool_result = self.engine.dispatch(
+                admitted = self.engine.dispatch(
                     state.agent,
                     Hook.TOOL_CALL,
                     call.arguments,
-                    {"tool": call.name, "args": call.arguments, "attempt": attempt},
+                    {**context, "args": call.arguments, "attempt": attempt},
+                    stage=self._stager(state.run_id, Origin.TOOL_RESULT),
                 )
-                self._record_dispatch(state, Hook.TOOL_CALL, tool_result, call.arguments)
-                if tool_result.verdict == Verdict.DENY:
+                self._record_dispatch(state, Hook.TOOL_CALL, admitted, call.arguments)
+                if admitted.verdict == Verdict.DENY:
                     return state.model_copy(
                         update={
                             "status": "denied",
-                            "failure": f"policy {tool_result.policies[-1]} denied tool {call.name}",
+                            "failure": f"policy {admitted.policies[-1]} denied tool {call.name}",
                         }
                     )
+                if failure := _unsupported_block(admitted, "tool_call"):
+                    return state.model_copy(update={"status": "denied", "failure": failure})
+                # Only the tool's declared detokenize fields see plaintext (SPEC 3.5.2).
+                arguments = detokenize(admitted.payload, tool.detokenize, self.vault, state.run_id)
                 try:
                     value = self.sources[tool.source.removeprefix("source.")].execute(
-                        tool.operation, call.arguments, timeout=30
+                        tool.operation, arguments, timeout=30
                     )
                 except Exception as exc:
                     if attempt == tool.retries:
@@ -284,6 +393,18 @@ class Loop:
                 else:
                     error = False
                     break
+            if not error:
+                checked = self.engine.dispatch(
+                    state.agent,
+                    Hook.TOOL_RESULT,
+                    value,
+                    {**context, "result": value},
+                    stage=self._stager(state.run_id, Origin.TOOL_RESULT),
+                )
+                self._record_dispatch(state, Hook.TOOL_RESULT, checked, value)
+                if failure := _unsupported_block(checked, "tool_result"):
+                    return state.model_copy(update={"status": "denied", "failure": failure})
+                value = checked.payload
             results.append(
                 ToolResult(tool_call_id=call.id, name=call.name, content=value, is_error=error)
             )
@@ -291,3 +412,37 @@ class Loop:
         return state.model_copy(
             update={"messages": [*state.messages, Message(role="tool", tool_results=results)]}
         )
+
+
+def _unbound_stage(declared: Transform) -> Callable[[Any], Any]:
+    raise TransformError(f"{declared.kind} dispatched without a run-scoped vault")
+
+
+def _request_payload(agent: Agent, text: str) -> dict[str, Any]:
+    """Shape caller input for the request hook: a declared object, or the default message."""
+
+    if agent.input:
+        try:
+            value = json.loads(text)
+        except json.JSONDecodeError:
+            value = None
+        if isinstance(value, dict):
+            return value
+    return {"message": text}
+
+
+def _unsupported_block(result: DispatchResult, hook: str) -> str | None:
+    """Return the failure for a verdict that stops this hook, or None to proceed.
+
+    REQUIRE_APPROVAL discards the staged transforms, so proceeding would release the
+    untransformed payload; v0.1 suspends only at model_call, so other hooks fail closed.
+    """
+
+    if result.verdict == Verdict.DENY:
+        return f"policy {result.policies[-1]} denied {hook}"
+    if result.verdict == Verdict.REQUIRE_APPROVAL:
+        return (
+            f"policy {result.policies[-1]} requires approval at {hook}, "
+            "which v0.1 supports only at model_call"
+        )
+    return None

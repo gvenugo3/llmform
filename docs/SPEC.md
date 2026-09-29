@@ -976,6 +976,25 @@ rather than overriding. Recursive discovery and explicit include order were reje
 the former makes project closure surprising, while the latter lets load order alter
 security-sensitive meaning.
 
+### D15 — Tokens are whole-field opaque handles ✅ 2026-09-29
+
+A token is `{{llmform:token:<24 URL-safe base64 characters>}}`, from 18 random bytes. It
+carries no plaintext, hash, or run ID, so a transcript reveals nothing about the value,
+and the fixed prefix makes a token easy to recognize in logs and tests. `tokenize`
+replaces a whole top-level field, and re-substitution (§3.5.2) restores a field only
+when its entire value is one token of the current run. A token inside a longer string,
+such as a model's prose, is never resolved. Scanning model-authored text for tokens was
+rejected: the model controls that text, so scanning would let it assemble a token into
+any field and turn re-substitution into an injection path.
+
+The runtime applies transforms at every hook. `request` tokens take `OriginRequest`; all
+other hooks take `OriginToolResult`, which is never restored to the caller. At
+`model_call`, fields name message fields and the transform applies to the copy sent to
+the provider, with each user message taken as `OriginRequest`. A transform whose payload
+is not an object fails the run rather than passing the value through. Because
+`REQUIRE_APPROVAL` discards staged transforms, a hook that cannot yet suspend (every hook
+but `model_call` in v0.1) fails closed on it instead of proceeding untransformed.
+
 ### Still open
 
 - Is `llmform` available on GitHub and pkg.go.dev under the intended org?
