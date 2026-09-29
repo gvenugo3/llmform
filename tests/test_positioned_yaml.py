@@ -49,7 +49,7 @@ audit:
     duplicate = next(item for item in load_project(tmp_path).diagnostics if item.code == "LLMF002")
     assert duplicate.position.line == 3
     assert duplicate.position.column == 3
-    assert f"{path}:2:3" in (duplicate.hint or "")
+    assert f"{path.as_posix()}:2:3" in (duplicate.hint or "")
 
 
 def test_recursive_yaml_alias_is_a_positioned_diagnostic(tmp_path) -> None:

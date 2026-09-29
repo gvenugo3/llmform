@@ -27,7 +27,7 @@ class Position:
                 file = file.relative_to(root)
             except ValueError:
                 pass
-        return f"{file}:{self.line}:{self.column}"
+        return f"{file.as_posix()}:{self.line}:{self.column}"
 
 
 @dataclass(frozen=True)
@@ -59,7 +59,7 @@ class Diagnostic:
             "code": self.code,
             "severity": self.severity.value,
             "message": self.message,
-            "file": str(self.position.file),
+            "file": self.position.file.as_posix(),
             "line": self.position.line,
             "column": self.position.column,
             "context": self.context,
@@ -101,7 +101,7 @@ class DiagnosticSummary:
 def sort_diagnostics(diagnostics: Iterable[Diagnostic]) -> list[Diagnostic]:
     return sorted(
         diagnostics,
-        key=lambda d: (str(d.position.file), d.position.line, d.position.column, d.code),
+        key=lambda d: (d.position.file.as_posix(), d.position.line, d.position.column, d.code),
     )
 
 

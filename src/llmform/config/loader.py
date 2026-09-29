@@ -155,6 +155,9 @@ def _collect_positions(
                 continue
             if key in seen:
                 first = seen[key]
+                first_position = Position(
+                    file, first.start_mark.line + 1, first.start_mark.column + 1
+                )
                 diagnostics.append(
                     Diagnostic(
                         "LLMF002",
@@ -165,10 +168,7 @@ def _collect_positions(
                             key_node.start_mark.line + 1,
                             key_node.start_mark.column + 1,
                         ),
-                        (
-                            f"first declared at {file}:{first.start_mark.line + 1}:"
-                            f"{first.start_mark.column + 1}"
-                        ),
+                        f"first declared at {first_position.display()}",
                     )
                 )
             else:
