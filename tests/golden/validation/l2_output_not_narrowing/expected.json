@@ -1,0 +1,22 @@
+{
+  "diagnostics": [
+    {
+      "code": "LLMF501",
+      "severity": "error",
+      "message": "tool.search output does not narrow the operation returns schema",
+      "file": "llmform.yaml",
+      "line": 27,
+      "column": 13,
+      "context": null,
+      "hint": null,
+      "suggestion": null
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "warnings": 0,
+    "total": 1,
+    "shown": 1,
+    "omitted": 0
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "diagnostics": [
+    {
+      "code": "LLMF102",
+      "severity": "error",
+      "message": "llmform.lock is out of date",
+      "file": "llmform.lock",
+      "line": 1,
+      "column": 1,
+      "context": null,
+      "hint": "changed sections: closure_sha256, files, policies",
+      "suggestion": null
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "warnings": 0,
+    "total": 1,
+    "shown": 1,
+    "omitted": 0
+  }
+}

@@ -1,0 +1,2 @@
+llmform.yaml:27:18: error [LLMF506]: detokenize field 'secret' is absent from the tool input schema
+Summary: 1 error, 0 warnings

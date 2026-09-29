@@ -1,0 +1,22 @@
+{
+  "diagnostics": [
+    {
+      "code": "LLMF410",
+      "severity": "error",
+      "message": "invalid CEL expression",
+      "file": "llmform.yaml",
+      "line": 30,
+      "column": 24,
+      "context": "on tool.search (schema: input.json)",
+      "hint": "input.query ==",
+      "suggestion": null
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "warnings": 0,
+    "total": 1,
+    "shown": 1,
+    "omitted": 0
+  }
+}

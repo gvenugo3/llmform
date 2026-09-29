@@ -1,0 +1,22 @@
+{
+  "diagnostics": [
+    {
+      "code": "LLMF400",
+      "severity": "error",
+      "message": "unresolved local $ref '#/$defs/missing'",
+      "file": "schemas/input.json",
+      "line": 1,
+      "column": 1,
+      "context": null,
+      "hint": "schema path: properties/query/$ref",
+      "suggestion": null
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "warnings": 0,
+    "total": 1,
+    "shown": 1,
+    "omitted": 0
+  }
+}

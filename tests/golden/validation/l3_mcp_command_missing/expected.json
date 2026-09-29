@@ -1,0 +1,33 @@
+{
+  "diagnostics": [
+    {
+      "code": "LLMF303",
+      "severity": "warning",
+      "message": "source.tools is unreachable",
+      "file": "llmform.yaml",
+      "line": 4,
+      "column": 5,
+      "context": null,
+      "hint": null,
+      "suggestion": null
+    },
+    {
+      "code": "LLMF600",
+      "severity": "error",
+      "message": "MCP command 'llmform-golden-missing-command' is not on PATH",
+      "file": "llmform.yaml",
+      "line": 5,
+      "column": 15,
+      "context": null,
+      "hint": null,
+      "suggestion": null
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "warnings": 1,
+    "total": 2,
+    "shown": 2,
+    "omitted": 0
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "diagnostics": [
+    {
+      "code": "LLMF413",
+      "severity": "error",
+      "message": "CEL expression exceeds the static cost limit",
+      "file": "llmform.yaml",
+      "line": 30,
+      "column": 12,
+      "context": "on tool.search (schema: input.json)",
+      "hint": null,
+      "suggestion": null
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "warnings": 0,
+    "total": 1,
+    "shown": 1,
+    "omitted": 0
+  }
+}

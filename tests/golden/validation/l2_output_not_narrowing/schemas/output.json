@@ -1,0 +1,10 @@
+{
+  "type": "object",
+  "properties": {
+    "invented": {
+      "type": "string"
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

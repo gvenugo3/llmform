@@ -1,0 +1,2 @@
+schemas/input.json:2:1: error [LLMF401]: invalid JSON Schema: Expecting property name enclosed in double quotes
+Summary: 1 error, 0 warnings

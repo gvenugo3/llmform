@@ -1,0 +1,44 @@
+{
+  "diagnostics": [
+    {
+      "code": "LLMF303",
+      "severity": "warning",
+      "message": "provider.local is unreachable",
+      "file": "llmform.yaml",
+      "line": 4,
+      "column": 5,
+      "context": null,
+      "hint": null,
+      "suggestion": null
+    },
+    {
+      "code": "LLMF303",
+      "severity": "warning",
+      "message": "model.default is unreachable",
+      "file": "llmform.yaml",
+      "line": 7,
+      "column": 5,
+      "context": null,
+      "hint": null,
+      "suggestion": null
+    },
+    {
+      "code": "LLMF304",
+      "severity": "error",
+      "message": "dependency cycle: model.default -> provider.local -> model.default",
+      "file": "llmform.yaml",
+      "line": 7,
+      "column": 5,
+      "context": null,
+      "hint": null,
+      "suggestion": null
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "warnings": 2,
+    "total": 3,
+    "shown": 3,
+    "omitted": 0
+  }
+}

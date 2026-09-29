@@ -1,0 +1,4 @@
+llmform.yaml:4:5: warning [LLMF303]: provider.local is unreachable
+llmform.yaml:7:5: warning [LLMF303]: model.default is unreachable
+llmform.yaml:7:5: error [LLMF304]: dependency cycle: model.default -> provider.local -> model.default
+Summary: 1 error, 2 warnings

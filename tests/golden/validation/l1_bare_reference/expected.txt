@@ -1,0 +1,4 @@
+llmform.yaml:4:5: warning [LLMF303]: provider.local is unreachable
+llmform.yaml:8:15: error [LLMF305]: reference 'local' must be a provider.<name> address
+  did you mean 'provider.local'?
+Summary: 1 error, 1 warning

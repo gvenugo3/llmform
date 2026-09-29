@@ -1,0 +1,22 @@
+{
+  "diagnostics": [
+    {
+      "code": "LLMF506",
+      "severity": "error",
+      "message": "detokenize field 'secret' is absent from the tool input schema",
+      "file": "llmform.yaml",
+      "line": 27,
+      "column": 18,
+      "context": null,
+      "hint": null,
+      "suggestion": null
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "warnings": 0,
+    "total": 1,
+    "shown": 1,
+    "omitted": 0
+  }
+}

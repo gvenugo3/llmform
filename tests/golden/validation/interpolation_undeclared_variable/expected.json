@@ -1,0 +1,22 @@
+{
+  "diagnostics": [
+    {
+      "code": "LLMF202",
+      "severity": "error",
+      "message": "--var names undeclared variable 'timeout'",
+      "file": "llmform.yaml",
+      "line": 3,
+      "column": 3,
+      "context": null,
+      "hint": null,
+      "suggestion": null
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "warnings": 0,
+    "total": 1,
+    "shown": 1,
+    "omitted": 0
+  }
+}

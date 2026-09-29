@@ -1,0 +1,2 @@
+llmform.yaml:33:12: error [LLMF505]: model.default requires a declared price for agent.support cost enforcement
+Summary: 1 error, 0 warnings

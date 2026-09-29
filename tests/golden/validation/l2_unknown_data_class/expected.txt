@@ -1,0 +1,2 @@
+llmform.yaml:30:11: error [LLMF503]: data class 'restriced' is not declared by an operation reachable from agent.support
+Summary: 1 error, 0 warnings

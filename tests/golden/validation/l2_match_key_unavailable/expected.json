@@ -1,0 +1,22 @@
+{
+  "diagnostics": [
+    {
+      "code": "LLMF502",
+      "severity": "error",
+      "message": "match key 'tool' is not available at the request hook",
+      "file": "llmform.yaml",
+      "line": 30,
+      "column": 19,
+      "context": null,
+      "hint": null,
+      "suggestion": null
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "warnings": 0,
+    "total": 1,
+    "shown": 1,
+    "omitted": 0
+  }
+}

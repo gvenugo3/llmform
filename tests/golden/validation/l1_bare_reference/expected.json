@@ -1,0 +1,33 @@
+{
+  "diagnostics": [
+    {
+      "code": "LLMF303",
+      "severity": "warning",
+      "message": "provider.local is unreachable",
+      "file": "llmform.yaml",
+      "line": 4,
+      "column": 5,
+      "context": null,
+      "hint": null,
+      "suggestion": null
+    },
+    {
+      "code": "LLMF305",
+      "severity": "error",
+      "message": "reference 'local' must be a provider.<name> address",
+      "file": "llmform.yaml",
+      "line": 8,
+      "column": 15,
+      "context": null,
+      "hint": null,
+      "suggestion": "provider.local"
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "warnings": 1,
+    "total": 2,
+    "shown": 2,
+    "omitted": 0
+  }
+}

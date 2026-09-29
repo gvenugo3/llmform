@@ -1,0 +1,22 @@
+{
+  "diagnostics": [
+    {
+      "code": "LLMF507",
+      "severity": "warning",
+      "message": "tool.search detokenizes data into a write operation",
+      "file": "llmform.yaml",
+      "line": 27,
+      "column": 17,
+      "context": null,
+      "hint": "re-substitution can disclose tokenized values outside the run",
+      "suggestion": null
+    }
+  ],
+  "summary": {
+    "errors": 0,
+    "warnings": 1,
+    "total": 1,
+    "shown": 1,
+    "omitted": 0
+  }
+}
