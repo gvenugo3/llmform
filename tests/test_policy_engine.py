@@ -21,7 +21,7 @@ def test_later_denial_discards_staged_transforms(tmp_path) -> None:
     engine = PolicyEngine(
         load_project(tmp_path),
         lambda rule, context: rule == "true",
-        lambda kind, payload: lambda: minted.append(kind) or payload,
+        lambda transform: lambda payload: minted.append(transform.kind) or payload,
     )
 
     result = engine.dispatch("support", Hook.TOOL_CALL, {"query": "x"}, {})
@@ -43,13 +43,28 @@ def test_agent_policy_order_beats_declaration_order(tmp_path) -> None:
     engine = PolicyEngine(
         load_project(tmp_path),
         lambda rule, context: rule == "true",
-        lambda kind, payload: lambda: payload,
+        lambda transform: lambda payload: payload,
     )
 
     result = engine.dispatch("support", Hook.TOOL_CALL, {}, {})
 
     assert result.verdict == Verdict.DENY
     assert result.policies == ("deny",)
+
+
+def test_match_on_a_typed_address_applies_to_the_bare_runtime_name(tmp_path) -> None:
+    config = VALID.replace('    rule: "true"', '    match: {tool: tool.search}\n    rule: "false"')
+    write_config(tmp_path, config)
+    engine = PolicyEngine(
+        load_project(tmp_path),
+        lambda rule, context: rule == "true",
+        lambda transform: lambda payload: payload,
+    )
+
+    result = engine.dispatch("support", Hook.TOOL_CALL, {}, {"tool": "search"})
+
+    assert result.verdict == Verdict.DENY
+    assert result.policies == ("safe",)
 
 
 def test_tool_result_classes_restrict_the_following_model_call_and_survive_resume(tmp_path) -> None:
@@ -72,7 +87,7 @@ def test_tool_result_classes_restrict_the_following_model_call_and_survive_resum
             "restricted" not in context["data"]["classes"]
             or context["model"]["provider"] == "local"
         ),
-        lambda _kind, payload: lambda: payload,
+        lambda _transform: lambda payload: payload,
     )
     state = RunState(
         run_id="run_1",
@@ -103,7 +118,9 @@ def test_tool_result_classes_are_monotonic(tmp_path) -> None:
     )
     write_config(tmp_path, config)
     engine = PolicyEngine(
-        load_project(tmp_path), lambda _rule, _context: True, lambda _kind, payload: lambda: payload
+        load_project(tmp_path),
+        lambda _rule, _context: True,
+        lambda _transform: lambda payload: payload,
     )
     state = RunState(
         run_id="run_1",

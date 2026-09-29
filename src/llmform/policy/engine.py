@@ -7,10 +7,13 @@ from dataclasses import dataclass
 from typing import Any
 
 from llmform.config.loader import ConfigDocument
+from llmform.config.models import Transform
 from llmform.types import Hook, RecordedOutcome, RunState, Verdict
 
 RuleEvaluator = Callable[[str, Mapping[str, Any]], bool]
-TransformStager = Callable[[str, Any], Callable[[], Any]]
+# A stager turns a declared transform into a commit function. Commits run only after every
+# policy at the hook allows, so a denied hook never mints a token.
+TransformStager = Callable[[Transform], Callable[[Any], Any]]
 
 
 @dataclass(frozen=True)
@@ -36,9 +39,13 @@ class PolicyEngine:
         hook: Hook,
         payload: Any,
         context: Mapping[str, Any],
+        *,
+        stage: TransformStager | None = None,
+        approved: str | None = None,
     ) -> DispatchResult:
+        stage = stage or self.stage
         agent = self.config.agents[agent_name.removeprefix("agent.")]
-        staged: list[Callable[[], Any]] = []
+        staged: list[Callable[[Any], Any]] = []
         applied: list[str] = []
         for reference in agent.policies:
             name = reference.removeprefix("policy.")
@@ -47,15 +54,19 @@ class PolicyEngine:
                 continue
             applied.append(name)
             if policy.rule is None or self.evaluate(policy.rule, context):
-                staged.extend(self.stage(transform.kind, payload) for transform in policy.transform)
+                staged.extend(stage(transform) for transform in policy.transform)
                 continue
             verdict = Verdict(policy.otherwise)
+            # Resume replays the hook: the granted approval passes, and the remaining
+            # policies and transforms are evaluated again rather than skipped.
+            if verdict == Verdict.REQUIRE_APPROVAL and name == approved:
+                continue
             if verdict != Verdict.ALLOW:
                 return DispatchResult(verdict, payload, tuple(applied))
         if not applied and hook == Hook.TOOL_CALL and agent.default_tool_posture == "deny":
             return DispatchResult(Verdict.DENY, payload, ())
         for commit in staged:
-            payload = commit()
+            payload = commit(payload)
         outcome = RecordedOutcome.TRANSFORM if staged else RecordedOutcome.NOT_APPLICABLE
         return DispatchResult(outcome, payload, tuple(applied))
 
@@ -80,6 +91,9 @@ class PolicyEngine:
         payload: Any,
         model: Mapping[str, Any],
         context: Mapping[str, Any] | None = None,
+        *,
+        stage: TransformStager | None = None,
+        approved: str | None = None,
     ) -> DispatchResult:
         """Dispatch a model call with its data classification derived from state."""
 
@@ -87,13 +101,21 @@ class PolicyEngine:
         model_context["model"] = model
         model_context["messages"] = [message.model_dump(mode="json") for message in state.messages]
         model_context["data"] = {"classes": list(state.classes)}
-        return self.dispatch(agent_name, Hook.MODEL_CALL, payload, model_context)
+        return self.dispatch(
+            agent_name, Hook.MODEL_CALL, payload, model_context, stage=stage, approved=approved
+        )
 
     @staticmethod
     def _matches(match: object, context: Mapping[str, Any]) -> bool:
         if match is None:
             return True
         for key, value in match.model_dump().items():
-            if value is not None and context.get(key) != value:
+            if value is None:
+                continue
+            # Config writes typed addresses (tool.x); the runtime context carries bare names.
+            actual = context.get(key)
+            if not isinstance(actual, str) or (
+                actual.removeprefix(f"{key}.") != value.removeprefix(f"{key}.")
+            ):
                 return False
         return True
