@@ -57,3 +57,39 @@ Configuration discovery uses the nearest parent containing either `llmform.yaml`
 `*.llmform.yaml` fragment. It loads the primary file first, then fragments in lexical
 order. Fragments-only projects are valid. Duplicate resource addresses are errors; load
 order never overrides a resource silently.
+
+## OpenAI integration test
+
+The default test suite and pull-request CI stay offline: they need no provider
+credentials, network access, or MCP processes. A separate, opt-in suite in
+`tests/integration/` calls the live OpenAI Responses API. It checks that `llmform run`
+resolves `${secret.OPENAI_API_KEY}`, completes a deterministic prompt, and writes an
+audit record without the key. It also checks a tool round trip in which tokenized values
+never reach the model.
+
+### Configure it (maintainers, once)
+
+1. In **Settings → Environments**, create an environment named `openai-integration`.
+   Add required reviewers or restrict it to `main` if you want an approval gate.
+2. Add a secret named `OPENAI_API_KEY` to that environment, or to the repository. Use a
+   key from a project with a low spending limit.
+
+### Run it
+
+In **Actions → OpenAI integration → Run workflow**, choose a branch, optionally change
+the model ID (default `gpt-4.1-mini`), and start the run. The workflow runs only on
+manual dispatch, so pull-request code never runs with the secret. If the secret is
+missing, the workflow fails at its first step with an explanation.
+
+To run the suite locally:
+
+```shell
+export OPENAI_API_KEY=...            # never commit this value
+LLMFORM_OPENAI_INTEGRATION=1 LLMFORM_OPENAI_MODEL=gpt-4.1-mini \
+  python -m pytest tests/integration -m openai --no-cov -v
+```
+
+Without `LLMFORM_OPENAI_INTEGRATION=1` the suite is skipped. With it but without
+`OPENAI_API_KEY`, the tests fail instead of skipping, so a configured run cannot pass
+without calling the API. GitHub masks the secret in workflow logs, and the tests assert
+that the key never appears in command output or audit records.

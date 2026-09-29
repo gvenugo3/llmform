@@ -32,15 +32,60 @@ def _post(url: str, body: dict[str, Any], headers: dict[str, str]) -> dict[str, 
             429: ProviderErrorKind.RATE_LIMIT,
             400: ProviderErrorKind.CONTEXT_LENGTH,
         }
-        raise ProviderError(
-            kinds.get(exc.code, ProviderErrorKind.TRANSIENT), f"provider HTTP {exc.code}"
-        ) from exc
+        kind = kinds.get(exc.code, ProviderErrorKind.TRANSIENT)
+        message = f"provider HTTP {exc.code}"
+        # Auth errors can echo a partial credential, so only other errors carry the reason.
+        if kind != ProviderErrorKind.AUTH and (reason := _error_reason(exc)):
+            message += f": {reason}"
+        raise ProviderError(kind, message) from exc
     except URLError as exc:
         raise ProviderError(ProviderErrorKind.TRANSIENT, str(exc)) from exc
 
 
+def _error_reason(exc: HTTPError) -> str | None:
+    """Return the provider's short error message from a JSON error body, if any."""
+
+    try:
+        error = json.loads(exc.read()).get("error")
+    except (OSError, ValueError, AttributeError):
+        return None
+    message = error.get("message") if isinstance(error, dict) else error
+    return str(message)[:300] if message else None
+
+
 def _messages(messages: list[Message]) -> list[dict[str, Any]]:
     return [message.model_dump(exclude_none=True) for message in messages]
+
+
+def _responses_input(messages: list[Message]) -> list[dict[str, Any]]:
+    """Convert provider-neutral messages into OpenAI Responses API input items.
+
+    Text turns become role messages; tool calls and results become the separate
+    ``function_call`` and ``function_call_output`` items the API correlates by call ID.
+    """
+
+    items: list[dict[str, Any]] = []
+    for message in messages:
+        for result in message.tool_results:
+            items.append(
+                {
+                    "type": "function_call_output",
+                    "call_id": result.tool_call_id,
+                    "output": json.dumps(result.content),
+                }
+            )
+        if message.content:
+            items.append({"role": message.role, "content": message.content})
+        for call in message.tool_calls:
+            items.append(
+                {
+                    "type": "function_call",
+                    "call_id": call.id,
+                    "name": call.name,
+                    "arguments": json.dumps(call.arguments),
+                }
+            )
+    return items
 
 
 class OpenAIProvider(Provider):
@@ -55,7 +100,7 @@ class OpenAIProvider(Provider):
         tools: list[ToolDefinition],
         output_schema: dict[str, Any] | None = None,
     ) -> Completion:
-        body: dict[str, Any] = {"model": model, "input": _messages(messages)}
+        body: dict[str, Any] = {"model": model, "input": _responses_input(messages)}
         if tools:
             body["tools"] = [
                 {
@@ -63,6 +108,9 @@ class OpenAIProvider(Provider):
                     "name": t.name,
                     "description": t.description,
                     "parameters": t.input_schema,
+                    # Strict mode requires every property in `required`, but llmform
+                    # tool schemas may declare optional fields.
+                    "strict": False,
                 }
                 for t in tools
             ]

@@ -149,6 +149,9 @@ class Loop:
 
         return stage
 
+    def _read_json(self, reference: str) -> Any:
+        return json.loads((self.document.root / reference).read_text(encoding="utf-8"))
+
     def _finish(self, state: RunState) -> RunState:
         # The v0.1 vault is in memory; a terminal run can never resolve its tokens again.
         if state.status in TERMINAL:
@@ -304,11 +307,16 @@ class Loop:
             ToolDefinition(
                 name=name.removeprefix("tool."),
                 description=self.config.tools[name.removeprefix("tool.")].description,
-                input_schema={"type": "object"},
+                input_schema=self._read_json(self.config.tools[name.removeprefix("tool.")].input),
             )
             for name in agent.tools
         ]
-        provider_messages = [Message.model_validate(message) for message in call.payload]
+        # Instructions come from the locked prompt file, outside the transformed transcript.
+        instructions = (self.document.root / agent.instructions).read_text(encoding="utf-8")
+        provider_messages = [
+            Message(role="system", content=instructions),
+            *(Message.model_validate(message) for message in call.payload),
+        ]
         completion = self.provider.complete(provider_messages, model=model.id, tools=definitions)
         price = model.price
         cost = (
