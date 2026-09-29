@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from llmform.diagnostics import (
     Diagnostic,
@@ -51,6 +51,15 @@ def test_renderer_caps_findings_and_reports_omitted_count() -> None:
     assert "undefined field" in rendered
     assert "detokenization targets" not in rendered
     assert "1 shown, 1 omitted" in rendered
+
+
+def test_paths_render_with_forward_slashes_on_every_platform() -> None:
+    windows_file = PureWindowsPath(r"C:\project\a.llmform.yaml")
+    diagnostic = Diagnostic(
+        "LLMF002", Severity.ERROR, "duplicate key 'version'", Position(windows_file, 2, 1)
+    )
+    assert diagnostic.render().startswith("C:/project/a.llmform.yaml:2:1:")
+    assert diagnostic.as_dict()["file"] == "C:/project/a.llmform.yaml"
 
 
 def test_exit_code_reflects_highest_severity() -> None:

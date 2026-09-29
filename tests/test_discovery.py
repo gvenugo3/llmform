@@ -82,4 +82,4 @@ def test_duplicate_singleton_key_cites_both_files(tmp_path: Path) -> None:
     document = load_project(tmp_path)
     duplicate = next(item for item in document.diagnostics if item.code == "LLMF004")
     assert duplicate.position.file == second
-    assert str(first) in (duplicate.hint or "")
+    assert first.as_posix() in (duplicate.hint or "")

@@ -20,11 +20,11 @@ def _normalized_json(output: str, project: Path) -> str:
     payload = json.loads(output)
     for diagnostic in payload["diagnostics"]:
         diagnostic["file"] = Path(diagnostic["file"]).relative_to(project.resolve()).as_posix()
-    return json.dumps(payload, indent=2).replace(str(project.resolve()), ".") + "\n"
+    return json.dumps(payload, indent=2).replace(project.resolve().as_posix(), ".") + "\n"
 
 
 def _normalized_human(output: str, project: Path) -> str:
-    normalized = output.replace(str(project.resolve()), ".")
+    normalized = output.replace(project.resolve().as_posix(), ".")
     return "\n".join(line.rstrip() for line in normalized.splitlines()) + "\n"
 
 
