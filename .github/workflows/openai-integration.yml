@@ -1,0 +1,58 @@
+name: OpenAI integration
+
+# Manual only: pull-request code never runs with the OpenAI secret. Only users with write
+# access can dispatch a workflow, and only on a branch that is already in this repository.
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: OpenAI model ID to test against
+        required: true
+        default: gpt-4.1-mini
+
+permissions:
+  contents: read
+
+concurrency:
+  group: openai-integration
+  cancel-in-progress: false
+
+jobs:
+  openai:
+    name: OpenAI integration
+    runs-on: ubuntu-latest
+    # Maintainers can add required reviewers and branch rules to this environment.
+    environment: openai-integration
+    timeout-minutes: 10
+
+    steps:
+      - name: Check configuration
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "::error title=Missing OPENAI_API_KEY::Add an OPENAI_API_KEY secret to the openai-integration environment or the repository. See the README."
+            exit 1
+          fi
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install project
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+
+      - name: Run OpenAI integration tests
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          LLMFORM_OPENAI_INTEGRATION: "1"
+          # Passed through the environment, never interpolated into the script.
+          LLMFORM_OPENAI_MODEL: ${{ inputs.model }}
+        run: python -m pytest tests/integration -m openai --no-cov -v -p no:cacheprovider

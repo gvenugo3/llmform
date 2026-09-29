@@ -29,6 +29,9 @@ packages = ["src/llmform"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+markers = [
+  "openai: calls the live OpenAI API; opt-in with LLMFORM_OPENAI_INTEGRATION=1",
+]
 addopts = [
   "--cov=llmform",
   "--cov-report=term-missing:skip-covered",

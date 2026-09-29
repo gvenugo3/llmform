@@ -138,24 +138,31 @@ def test_refund_limit_is_denied_before_source_execution(tmp_path) -> None:
 
 
 def test_run_command_reports_runtime_refund_denial(tmp_path, monkeypatch) -> None:
-    document = project(tmp_path)
-    assert document.config is not None
-    (tmp_path / "input.json").write_text('{"type":"object"}')
-    config = document.config
-    config.tools["refund"] = Tool(
-        source="source.payments", operation="refund", description="Refund", input="input.json"
+    project(tmp_path)
+    # run applies the full offline checks, so the fixture must be a valid project.
+    schema = (
+        '{"type":"object","properties":{"amount":{"type":"integer"}},'
+        '"required":["amount"],"additionalProperties":false}'
     )
-    config.policies["limit"] = Policy(on="tool_call", rule="args.amount <= 100", otherwise="DENY")
-    config.agents["support"] = config.agents["support"].model_copy(
-        update={"tools": ["tool.refund"], "policies": ["policy.limit"]}
-    )
-    # Serialize the test fixture as config because the CLI owns project loading.
+    (tmp_path / "input.json").write_text(schema)
+    (tmp_path / "refund.json").write_text(schema)
     (tmp_path / "llmform.yaml").write_text(
         """version: "0.1"
 providers:
   local: {type: ollama}
 models:
   default: {provider: provider.local, id: test}
+sources:
+  payments:
+    type: http
+    base_url: https://payments.test
+    operations:
+      refund:
+        method: POST
+        path: /refunds
+        params:
+          amount: {type: integer, required: true}
+        returns: refund.json
 tools:
   refund: {source: source.payments, operation: refund, description: Refund, input: input.json}
 policies:

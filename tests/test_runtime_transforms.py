@@ -90,6 +90,10 @@ def write_project(root: Path, config: str = CONFIG) -> Path:
     return root
 
 
+def _user(messages: list[Message]) -> Message:
+    return next(message for message in messages if message.role == "user")
+
+
 class ScriptedProvider(Provider):
     """Looks up the account the caller supplied, then answers with a chosen field."""
 
@@ -102,10 +106,10 @@ class ScriptedProvider(Provider):
         usage = Usage(input_tokens=1, output_tokens=1)
         results = [result for message in messages for result in message.tool_results]
         if not results:
-            account = json.loads(messages[0].content)["account"]
+            account = json.loads(_user(messages).content)["account"]
             call = ToolCall(id="call-1", name="lookup", arguments={"account": account})
             return Completion(message=Message(role="assistant", tool_calls=[call]), usage=usage)
-        request = json.loads(messages[0].content)
+        request = json.loads(_user(messages).content)
         answer = request["account"] if self.answer == "account" else results[0].content["ssn"]
         return Completion(message=Message(role="assistant", content=answer), usage=usage)
 
@@ -214,7 +218,7 @@ def test_model_call_transform_applies_to_the_provider_request(tmp_path: Path) ->
     loop = Loop(load_project(write_project(tmp_path, config)), provider, {})
     state = loop.step(loop.start("support", Principal(role="developer"), "hi"))
     assert state.status == "completed", state.failure
-    sent = provider.messages[0]
+    sent = _user(provider.messages)
     assert sent.content.startswith(TOKEN_PREFIX)
     # The caller supplied "hi", so a model that echoes the token gives "hi" back.
     assert state.result == "hi"
@@ -234,7 +238,7 @@ def test_approved_model_call_replays_the_hook_transforms(tmp_path: Path) -> None
     assert suspended.status == "suspended"
     resumed = loop.step(suspended, approved=True)
     assert resumed.status == "completed", resumed.failure
-    assert provider.messages[0].content.startswith(TOKEN_PREFIX)
+    assert _user(provider.messages).content.startswith(TOKEN_PREFIX)
 
 
 def test_approval_at_tool_call_fails_closed(tmp_path: Path) -> None:
@@ -259,12 +263,12 @@ def test_transform_on_a_non_object_payload_fails_the_run(tmp_path: Path) -> None
 
 
 class FinalAnswer(Provider):
-    """Echoes the first message it receives, as a model that repeats a token would."""
+    """Echoes the first user message, as a model that repeats a token would."""
 
     def __init__(self) -> None:
         self.messages: list[Message] = []
 
     def complete(self, messages, *, model: str, tools: list[ToolDefinition], output_schema=None):
         self.messages = list(messages)
-        reply = Message(role="assistant", content=messages[0].content)
+        reply = Message(role="assistant", content=_user(messages).content)
         return Completion(message=reply, usage=Usage(input_tokens=1, output_tokens=1))

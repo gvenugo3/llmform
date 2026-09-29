@@ -10,7 +10,7 @@ from llmform import __version__
 from llmform.config.discovery import discover_files, find_project_root
 from llmform.config.format import format_file
 from llmform.config.interpolation import SecretScrubber, resolve_interpolations
-from llmform.config.loader import attach_model_positions, load_project
+from llmform.config.loader import ConfigDocument, attach_model_positions, load_project
 from llmform.config.models import ProjectConfig
 from llmform.config.online import validate_online
 from llmform.config.schema import validate_config_schema
@@ -20,6 +20,7 @@ from llmform.diagnostics import Diagnostic, Position, Severity, exit_code, rende
 from llmform.lock import LOCK_NAME, diff_lock, write_lock
 from llmform.policy.cel.compiler import validate_policy_rules
 from llmform.policy.cel.environment import validate_schema_profiles
+from llmform.providers import ProviderError
 from llmform.providers.http import OllamaProvider, OpenAIProvider
 from llmform.runtime import Loop
 from llmform.sources.http import HttpOperationSource
@@ -67,6 +68,50 @@ def _scrub_diagnostics(diagnostics: list[Diagnostic], scrubber: SecretScrubber) 
         )
         for item in diagnostics
     ]
+
+
+def _has_error(diagnostics: list[Diagnostic]) -> bool:
+    return any(item.severity == Severity.ERROR for item in diagnostics)
+
+
+def _check_project(
+    document: ConfigDocument, variables: list[str] | None
+) -> tuple[list[Diagnostic], SecretScrubber | None]:
+    """Resolve interpolations and run every offline check, filling in ``document.config``.
+
+    load_project leaves the config unset while ``${...}`` values are pending, so every
+    command that needs a typed config goes through here.
+    """
+
+    diagnostics = list(document.diagnostics)
+    if not document.files or _has_error(diagnostics):
+        return diagnostics, None
+    resolved, interpolation_diagnostics, scrubber = resolve_interpolations(
+        document, _parse_variables(variables or [])
+    )
+    diagnostics.extend(interpolation_diagnostics)
+    if interpolation_diagnostics:
+        return diagnostics, scrubber
+    try:
+        diagnostics.extend(
+            validate_config_schema(
+                resolved,
+                document.positions,
+                document.key_positions,
+                document.position(()),
+            )
+        )
+        if not _has_error(diagnostics):
+            document.config = ProjectConfig.model_validate(resolved)
+            attach_model_positions(document.config, document)
+            diagnostics.extend(validate_references(document))
+            diagnostics.extend(validate_schema_profiles(document))
+            diagnostics.extend(validate_policy_rules(document))
+            diagnostics.extend(validate_semantics(document))
+    except Exception as exc:  # Last-resort boundary prevents resolved-secret leakage.
+        typer.echo(scrubber.scrub(str(exc)), err=True)
+        raise typer.Exit(1) from None
+    return diagnostics, scrubber
 
 
 def _parse_variables(values: list[str]) -> dict[str, str]:
@@ -129,34 +174,8 @@ def lock(
     """Write the canonical offline closure lockfile."""
 
     document = load_project(path or Path.cwd())
-    diagnostics = list(document.diagnostics)
-    scrubber = None
-    if document.files and not any(item.severity == Severity.ERROR for item in diagnostics):
-        resolved, interpolation_diagnostics, scrubber = resolve_interpolations(
-            document, _parse_variables(variable or [])
-        )
-        diagnostics.extend(interpolation_diagnostics)
-        if not interpolation_diagnostics:
-            try:
-                diagnostics.extend(
-                    validate_config_schema(
-                        resolved,
-                        document.positions,
-                        document.key_positions,
-                        document.position(()),
-                    )
-                )
-                if not any(item.severity == Severity.ERROR for item in diagnostics):
-                    document.config = ProjectConfig.model_validate(resolved)
-                    attach_model_positions(document.config, document)
-                    diagnostics.extend(validate_references(document))
-                    diagnostics.extend(validate_schema_profiles(document))
-                    diagnostics.extend(validate_policy_rules(document))
-                    diagnostics.extend(validate_semantics(document))
-            except Exception as exc:
-                typer.echo(scrubber.scrub(str(exc)), err=True)
-                raise typer.Exit(1) from None
-    if not any(item.severity == Severity.ERROR for item in diagnostics):
+    diagnostics, scrubber = _check_project(document, variable)
+    if not _has_error(diagnostics):
         try:
             lockfile = write_lock(document)
         except OSError as exc:
@@ -188,11 +207,14 @@ def run(
     principal: Annotated[str | None, typer.Option("--principal", help="JSON principal")] = None,
     trust_sources: Annotated[bool, typer.Option("--trust-sources")] = False,
     json_output: Annotated[bool, typer.Option("--json")] = False,
+    variable: Annotated[list[str] | None, typer.Option("--var", help="Set NAME=VALUE")] = None,
 ) -> None:
     """Execute an agent locally with runtime policy enforcement."""
     document = load_project(path or Path.cwd())
-    if document.config is None or document.diagnostics:
-        typer.echo(render_all(document.diagnostics, document.root), err=True)
+    diagnostics, scrubber = _check_project(document, variable)
+    if document.config is None or _has_error(diagnostics):
+        diagnostics = _scrub_diagnostics(diagnostics, scrubber) if scrubber else diagnostics
+        typer.echo(render_all(diagnostics, document.root), err=True)
         raise typer.Exit(1)
     agent_name = agent.removeprefix("agent.")
     if agent_name not in document.config.agents:
@@ -243,18 +265,26 @@ def run(
         else:
             sources[name] = McpSource(source.command, trusted=trust_sources)
     loop = Loop(document, provider, sources, audit_path=document.root / "llmform.audit.jsonl")
-    state = loop.start(agent_name, actor, text)
-    while state.status in {"running", "suspended"}:
-        if state.pending:
-            typer.echo(
-                f"Approval required by {state.pending.policy}: {state.pending.approvers}", err=True
-            )
-            state = loop.step(state, approved=typer.confirm("Approve this action?", default=False))
-        else:
-            state = loop.step(state)
-    for source in sources.values():
-        if isinstance(source, McpSource):
-            source.close()
+    try:
+        state = loop.start(agent_name, actor, text)
+        while state.status in {"running", "suspended"}:
+            if state.pending:
+                typer.echo(
+                    f"Approval required by {state.pending.policy}: {state.pending.approvers}",
+                    err=True,
+                )
+                approved = typer.confirm("Approve this action?", default=False)
+                state = loop.step(state, approved=approved)
+            else:
+                state = loop.step(state)
+    except ProviderError as exc:
+        message = f"provider error ({exc.kind.value}): {exc}"
+        typer.echo(scrubber.scrub(message) if scrubber else message, err=True)
+        raise typer.Exit(1) from None
+    finally:
+        for source in sources.values():
+            if isinstance(source, McpSource):
+                source.close()
     if json_output:
         typer.echo(state.model_dump_json())
     elif state.status == "completed":
@@ -263,6 +293,31 @@ def run(
         typer.echo(f"{state.status}: {state.failure}", err=True)
     if state.status != "completed":
         raise typer.Exit(1)
+
+
+def _lock_findings(document: ConfigDocument) -> list[Diagnostic]:
+    try:
+        changed = diff_lock(document)
+    except (OSError, ValueError) as exc:
+        return [
+            Diagnostic(
+                "LLMF102",
+                Severity.ERROR,
+                f"cannot verify {LOCK_NAME}: {exc}",
+                Position(document.root / LOCK_NAME),
+            )
+        ]
+    if not changed:
+        return []
+    return [
+        Diagnostic(
+            "LLMF102",
+            Severity.ERROR,
+            f"{LOCK_NAME} is out of date",
+            Position(document.root / LOCK_NAME),
+            f"changed sections: {', '.join(changed)}",
+        )
+    ]
 
 
 @app.command()
@@ -281,59 +336,16 @@ def validate(
 ) -> None:
     """Validate an llmform project offline."""
     document = load_project(path or Path.cwd())
-    diagnostics = list(document.diagnostics)
-    if document.files and not any(item.severity == Severity.ERROR for item in diagnostics):
-        resolved, interpolation_diagnostics, scrubber = resolve_interpolations(
-            document, _parse_variables(variable or [])
-        )
-        diagnostics.extend(interpolation_diagnostics)
-        if not interpolation_diagnostics:
-            try:
-                diagnostics.extend(
-                    validate_config_schema(
-                        resolved,
-                        document.positions,
-                        document.key_positions,
-                        document.position(()),
-                    )
-                )
-                if not any(item.severity == Severity.ERROR for item in diagnostics):
-                    document.config = ProjectConfig.model_validate(resolved)
-                    attach_model_positions(document.config, document)
-                    diagnostics.extend(validate_references(document))
-                    diagnostics.extend(validate_schema_profiles(document))
-                    diagnostics.extend(validate_policy_rules(document))
-                    diagnostics.extend(validate_semantics(document))
-                    if online and not any(item.severity == Severity.ERROR for item in diagnostics):
-                        diagnostics.extend(validate_online(document))
-                    if locked and not any(item.severity == Severity.ERROR for item in diagnostics):
-                        try:
-                            changed = diff_lock(document)
-                        except (OSError, ValueError) as exc:
-                            diagnostics.append(
-                                Diagnostic(
-                                    "LLMF102",
-                                    Severity.ERROR,
-                                    f"cannot verify {LOCK_NAME}: {exc}",
-                                    Position(document.root / LOCK_NAME),
-                                )
-                            )
-                        else:
-                            if changed:
-                                diagnostics.append(
-                                    Diagnostic(
-                                        "LLMF102",
-                                        Severity.ERROR,
-                                        f"{LOCK_NAME} is out of date",
-                                        Position(document.root / LOCK_NAME),
-                                        f"changed sections: {', '.join(changed)}",
-                                    )
-                                )
-            except Exception as exc:  # Last-resort boundary prevents resolved-secret leakage.
-                typer.echo(scrubber.scrub(str(exc)), err=True)
-                raise typer.Exit(1) from None
-    else:
-        scrubber = None
+    diagnostics, scrubber = _check_project(document, variable)
+    if document.config is not None and not _has_error(diagnostics):
+        try:
+            if online:
+                diagnostics.extend(validate_online(document))
+            if locked and not _has_error(diagnostics):
+                diagnostics.extend(_lock_findings(document))
+        except Exception as exc:  # Last-resort boundary prevents resolved-secret leakage.
+            typer.echo(scrubber.scrub(str(exc)) if scrubber else str(exc), err=True)
+            raise typer.Exit(1) from None
 
     if scrubber:
         diagnostics = _scrub_diagnostics(diagnostics, scrubber)
