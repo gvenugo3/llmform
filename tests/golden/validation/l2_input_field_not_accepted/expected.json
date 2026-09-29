@@ -1,0 +1,22 @@
+{
+  "diagnostics": [
+    {
+      "code": "LLMF500",
+      "severity": "error",
+      "message": "tool input field 'query' is not accepted by source.api.search",
+      "file": "llmform.yaml",
+      "line": 26,
+      "column": 12,
+      "context": null,
+      "hint": null,
+      "suggestion": null
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "warnings": 0,
+    "total": 1,
+    "shown": 1,
+    "omitted": 0
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "diagnostics": [
+    {
+      "code": "LLMF003",
+      "severity": "error",
+      "message": "duplicate resource provider.local",
+      "file": "extra.llmform.yaml",
+      "line": 2,
+      "column": 3,
+      "context": null,
+      "hint": "first declared at ./llmform.yaml:3:3",
+      "suggestion": null
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "warnings": 0,
+    "total": 1,
+    "shown": 1,
+    "omitted": 0
+  }
+}

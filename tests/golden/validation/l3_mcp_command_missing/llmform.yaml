@@ -1,0 +1,8 @@
+version: "0.1"
+sources:
+  tools:
+    type: mcp
+    command: [llmform-golden-missing-command]
+    operations:
+      search:
+        returns: schemas/result.json

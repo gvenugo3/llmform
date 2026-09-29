@@ -1,0 +1,3 @@
+llmform.yaml:27:17: warning [LLMF507]: tool.search detokenizes data into a write operation
+  hint: re-substitution can disclose tokenized values outside the run
+Summary: 0 errors, 1 warning

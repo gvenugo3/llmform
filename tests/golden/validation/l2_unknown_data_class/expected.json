@@ -1,0 +1,22 @@
+{
+  "diagnostics": [
+    {
+      "code": "LLMF503",
+      "severity": "error",
+      "message": "data class 'restriced' is not declared by an operation reachable from agent.support",
+      "file": "llmform.yaml",
+      "line": 30,
+      "column": 11,
+      "context": null,
+      "hint": null,
+      "suggestion": null
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "warnings": 0,
+    "total": 1,
+    "shown": 1,
+    "omitted": 0
+  }
+}

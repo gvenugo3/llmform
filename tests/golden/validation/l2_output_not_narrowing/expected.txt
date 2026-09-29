@@ -1,0 +1,2 @@
+llmform.yaml:27:13: error [LLMF501]: tool.search output does not narrow the operation returns schema
+Summary: 1 error, 0 warnings

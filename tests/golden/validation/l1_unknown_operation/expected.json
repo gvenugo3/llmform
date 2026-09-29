@@ -1,0 +1,22 @@
+{
+  "diagnostics": [
+    {
+      "code": "LLMF301",
+      "severity": "error",
+      "message": "source.api has no operation 'serch'",
+      "file": "llmform.yaml",
+      "line": 24,
+      "column": 16,
+      "context": null,
+      "hint": null,
+      "suggestion": "search"
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "warnings": 0,
+    "total": 1,
+    "shown": 1,
+    "omitted": 0
+  }
+}

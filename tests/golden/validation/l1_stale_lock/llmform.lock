@@ -1,0 +1,52 @@
+{
+  "config_schema_version": "0.1",
+  "files": {
+    "llmform.yaml": "sha256:fa65314c79724f0897ec32687c0c336ec97cd142555ec8d0de1348c619315d7d",
+    "prompts/support.md": "sha256:424663e7f71154e884817b56ef36b03e10aee2c23a6823941cba486d74dba407",
+    "schemas/input.json": "sha256:8758b77bfcad3e6276f23388914d3e247c2679f1b8cf721393abfb9bd50a4298",
+    "schemas/result.json": "sha256:8758b77bfcad3e6276f23388914d3e247c2679f1b8cf721393abfb9bd50a4298"
+  },
+  "llmform_version": "0.1",
+  "lock_version": 1,
+  "models": {
+    "default": {
+      "id": "llama3.2",
+      "price": null
+    }
+  },
+  "policies": {
+    "safe": {
+      "approval": null,
+      "match": null,
+      "on": "tool_call",
+      "otherwise": "DENY",
+      "rule": "true",
+      "transform": []
+    }
+  },
+  "policy_attachments": {
+    "support": [
+      "policy.safe"
+    ]
+  },
+  "sources": {
+    "api": {
+      "operations": {
+        "search": {
+          "classes": [],
+          "method": "GET",
+          "params": {
+            "query": {
+              "required": true,
+              "type": "string"
+            }
+          },
+          "path": "/search",
+          "returns": "schemas/result.json"
+        }
+      },
+      "type": "http"
+    }
+  },
+  "closure_sha256": "sha256:de04a631512905d2cfa7b512f8fa22422fdd7159768b1b1f4642e3202ff5457d"
+}

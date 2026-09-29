@@ -1,0 +1,2 @@
+llmform.yaml:3:3: error [LLMF202]: --var names undeclared variable 'timeout'
+Summary: 1 error, 0 warnings

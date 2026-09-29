@@ -1,0 +1,22 @@
+{
+  "diagnostics": [
+    {
+      "code": "LLMF505",
+      "severity": "error",
+      "message": "model.default requires a declared price for agent.support cost enforcement",
+      "file": "llmform.yaml",
+      "line": 33,
+      "column": 12,
+      "context": null,
+      "hint": null,
+      "suggestion": null
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "warnings": 0,
+    "total": 1,
+    "shown": 1,
+    "omitted": 0
+  }
+}

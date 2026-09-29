@@ -1,0 +1,22 @@
+{
+  "diagnostics": [
+    {
+      "code": "LLMF203",
+      "severity": "error",
+      "message": "--var 'retries' does not match declared type integer",
+      "file": "llmform.yaml",
+      "line": 4,
+      "column": 11,
+      "context": null,
+      "hint": null,
+      "suggestion": null
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "warnings": 0,
+    "total": 1,
+    "shown": 1,
+    "omitted": 0
+  }
+}

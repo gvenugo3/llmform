@@ -1,0 +1,2 @@
+llmform.yaml:30:19: error [LLMF502]: match key 'tool' is not available at the request hook
+Summary: 1 error, 0 warnings

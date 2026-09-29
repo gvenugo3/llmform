@@ -1,0 +1,2 @@
+--var
+retries=many

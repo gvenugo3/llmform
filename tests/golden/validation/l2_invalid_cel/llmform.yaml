@@ -1,0 +1,36 @@
+version: "0.1"
+providers:
+  local:
+    type: ollama
+    endpoint: http://localhost:11434
+models:
+  default:
+    provider: provider.local
+    id: llama3.2
+sources:
+  api:
+    type: http
+    base_url: https://example.test
+    operations:
+      search:
+        method: GET
+        path: /search
+        params:
+          query: {type: string, required: true}
+        returns: schemas/result.json
+tools:
+  search:
+    source: source.api
+    operation: search
+    description: Search
+    input: schemas/input.json
+policies:
+  safe:
+    on: tool_call
+    rule: "input.query =="
+agents:
+  support:
+    model: model.default
+    instructions: prompts/support.md
+    tools: [tool.search]
+    policies: [policy.safe]

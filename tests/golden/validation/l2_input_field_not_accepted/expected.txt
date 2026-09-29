@@ -1,0 +1,2 @@
+llmform.yaml:26:12: error [LLMF500]: tool input field 'query' is not accepted by source.api.search
+Summary: 1 error, 0 warnings

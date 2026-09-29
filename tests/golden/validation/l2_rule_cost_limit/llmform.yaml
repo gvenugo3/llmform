@@ -1,0 +1,36 @@
+version: "0.1"
+providers:
+  local:
+    type: ollama
+    endpoint: http://localhost:11434
+models:
+  default:
+    provider: provider.local
+    id: llama3.2
+sources:
+  api:
+    type: http
+    base_url: https://example.test
+    operations:
+      search:
+        method: GET
+        path: /search
+        params:
+          query: {type: string, required: true}
+        returns: schemas/result.json
+tools:
+  search:
+    source: source.api
+    operation: search
+    description: Search
+    input: schemas/input.json
+policies:
+  safe:
+    on: tool_call
+    rule: 'args.query == "q0" || args.query == "q1" || args.query == "q2" || args.query == "q3" || args.query == "q4" || args.query == "q5" || args.query == "q6" || args.query == "q7" || args.query == "q8" || args.query == "q9" || args.query == "q10" || args.query == "q11" || args.query == "q12" || args.query == "q13" || args.query == "q14" || args.query == "q15" || args.query == "q16" || args.query == "q17" || args.query == "q18" || args.query == "q19" || args.query == "q20" || args.query == "q21" || args.query == "q22" || args.query == "q23" || args.query == "q24" || args.query == "q25" || args.query == "q26" || args.query == "q27" || args.query == "q28" || args.query == "q29" || args.query == "q30" || args.query == "q31" || args.query == "q32" || args.query == "q33" || args.query == "q34" || args.query == "q35" || args.query == "q36" || args.query == "q37" || args.query == "q38" || args.query == "q39"'
+agents:
+  support:
+    model: model.default
+    instructions: prompts/support.md
+    tools: [tool.search]
+    policies: [policy.safe]
