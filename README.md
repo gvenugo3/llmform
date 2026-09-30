@@ -69,7 +69,7 @@ never reach the model.
 
 ### Configure it (maintainers, once)
 
-1. In **Settings → Environments**, create an environment named `openai-integration`.
+1. In **Settings → Environments**, create an environment named `e2`.
    Add required reviewers or restrict it to `main` if you want an approval gate.
 2. Add a secret named `OPENAI_API_KEY` to that environment, or to the repository. Use a
    key from a project with a low spending limit.

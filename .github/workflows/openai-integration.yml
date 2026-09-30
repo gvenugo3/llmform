@@ -22,7 +22,7 @@ jobs:
     name: OpenAI integration
     runs-on: ubuntu-latest
     # Maintainers can add required reviewers and branch rules to this environment.
-    environment: openai-integration
+    environment: e2
     timeout-minutes: 10
 
     steps:
@@ -31,7 +31,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           if [ -z "$OPENAI_API_KEY" ]; then
-            echo "::error title=Missing OPENAI_API_KEY::Add an OPENAI_API_KEY secret to the openai-integration environment or the repository. See the README."
+            echo "::error title=Missing OPENAI_API_KEY::Add an OPENAI_API_KEY secret to the e2 environment or the repository. See the README."
             exit 1
           fi
 
