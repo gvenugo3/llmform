@@ -30,7 +30,8 @@
     "type": {
       "enum": [
         "openai",
-        "ollama"
+        "ollama",
+        "anthropic"
       ],
       "title": "Type",
       "type": "string"

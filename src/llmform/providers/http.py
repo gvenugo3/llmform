@@ -1,4 +1,4 @@
-"""Small non-streaming OpenAI Responses and Ollama provider adapters."""
+"""Small non-streaming OpenAI Responses, Anthropic Messages, and Ollama provider adapters."""
 
 from __future__ import annotations
 
@@ -149,6 +149,149 @@ class OpenAIProvider(Provider):
         usage = value.get("usage", {})
         return assistant(
             content,
+            calls,
+            Usage(
+                input_tokens=usage.get("input_tokens", 0),
+                output_tokens=usage.get("output_tokens", 0),
+            ),
+        )
+
+
+def _anthropic_input(messages: list[Message]) -> tuple[str | None, list[dict[str, Any]]]:
+    """Convert provider-neutral messages into Anthropic Messages API format.
+
+    Anthropic requires the system prompt to be passed as a top-level ``system``
+    parameter rather than as a message role.  Tool calls from the assistant
+    become ``tool_use`` content blocks; tool results are ``tool_result`` blocks
+    carried by a ``user`` turn.
+    """
+
+    system: str | None = None
+    turns: list[dict[str, Any]] = []
+
+    for message in messages:
+        if message.role == "system":
+            system = message.content
+            continue
+
+        if message.role == "tool":
+            # Tool results always go into a user turn.
+            content: list[dict[str, Any]] = [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": result.tool_call_id,
+                    "content": json.dumps(result.content),
+                    **({"is_error": True} if result.is_error else {}),
+                }
+                for result in message.tool_results
+            ]
+            turns.append({"role": "user", "content": content})
+            continue
+
+        if message.role == "assistant":
+            blocks: list[dict[str, Any]] = []
+            if message.content:
+                blocks.append({"type": "text", "text": message.content})
+            for call in message.tool_calls:
+                blocks.append(
+                    {
+                        "type": "tool_use",
+                        "id": call.id,
+                        "name": call.name,
+                        "input": call.arguments,
+                    }
+                )
+            turns.append({"role": "assistant", "content": blocks})
+            continue
+
+        # user role
+        turns.append({"role": "user", "content": message.content or ""})
+
+    return system, turns
+
+
+class AnthropicProvider(Provider):
+    """Adapter for the Anthropic Messages API (https://api.anthropic.com/v1/messages)."""
+
+    _ANTHROPIC_VERSION = "2023-06-01"
+
+    def __init__(
+        self,
+        api_key: str,
+        endpoint: str = "https://api.anthropic.com/v1/messages",
+    ):
+        self.api_key, self.endpoint = api_key, endpoint
+
+    def complete(
+        self,
+        messages: list[Message],
+        *,
+        model: str,
+        tools: list[ToolDefinition],
+        output_schema: dict[str, Any] | None = None,
+    ) -> Completion:
+        system, turns = _anthropic_input(messages)
+
+        # Anthropic requires at least one user turn.
+        if not turns:
+            turns = [{"role": "user", "content": ""}]
+
+        body: dict[str, Any] = {
+            "model": model,
+            "max_tokens": 4096,
+            "messages": turns,
+        }
+        if system:
+            body["system"] = system
+        if tools:
+            body["tools"] = [
+                {
+                    "name": t.name,
+                    "description": t.description,
+                    "input_schema": t.input_schema,
+                }
+                for t in tools
+            ]
+        headers: dict[str, str] = {
+            "x-api-key": self.api_key,
+            "anthropic-version": self._ANTHROPIC_VERSION,
+            "Content-Type": "application/json",
+        }
+        if output_schema:
+            # Anthropic structured output is in GA; pass the schema via tool_choice.
+            body["tools"] = (body.get("tools") or []) + [
+                {
+                    "name": "structured_output",
+                    "description": "Emit the structured response.",
+                    "input_schema": output_schema,
+                }
+            ]
+            body["tool_choice"] = {"type": "tool", "name": "structured_output"}
+
+        value = _post(self.endpoint, body, headers)
+
+        # Extract text and tool_use blocks from the response content list.
+        calls: list[dict[str, Any]] = []
+        text_content: str | None = None
+        for block in value.get("content", []):
+            if block.get("type") == "tool_use":
+                if output_schema and block.get("name") == "structured_output":
+                    # Structured output is returned as the tool input JSON.
+                    text_content = json.dumps(block.get("input", {}))
+                else:
+                    calls.append(
+                        {
+                            "id": block["id"],
+                            "name": block["name"],
+                            "arguments": block.get("input", {}),
+                        }
+                    )
+            elif block.get("type") == "text" and text_content is None:
+                text_content = block.get("text")
+
+        usage = value.get("usage", {})
+        return assistant(
+            text_content,
             calls,
             Usage(
                 input_tokens=usage.get("input_tokens", 0),
