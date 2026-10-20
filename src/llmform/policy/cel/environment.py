@@ -45,6 +45,7 @@ _RUN = object_of(
     cost_usd=DOUBLE,
     elapsed=DURATION,
     principal=_PRINCIPAL,
+    call_count=INT,
 )
 
 

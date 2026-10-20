@@ -1,9 +1,18 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationInfo, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PrivateAttr,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 from llmform.diagnostics import Position
 
@@ -151,6 +160,32 @@ class Approval(StrictModel):
     approvers: str = Field(min_length=1)
 
 
+class RateLimit(StrictModel):
+    max_calls: int = Field(gt=0)
+    window: str | None = None
+
+    @field_validator("window")
+    @classmethod
+    def _validate_window(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        match = re.fullmatch(r"(\d+)(s|m|h)", v.strip())
+        if not match or int(match.group(1)) <= 0:
+            raise ValueError(f"malformed rate limit window {v!r}; expected e.g. '10s', '1m', '1h'")
+        return v
+
+
+class CostLimit(StrictModel):
+    max_cost_usd: float | None = Field(default=None, gt=0)
+    max_tokens: int | None = Field(default=None, gt=0)
+
+    @model_validator(mode="after")
+    def _validate_cost_limit(self) -> CostLimit:
+        if self.max_cost_usd is None and self.max_tokens is None:
+            raise ValueError("cost_limit requires at least one of max_cost_usd or max_tokens")
+        return self
+
+
 class Policy(StrictModel):
     on: Literal["request", "model_call", "tool_call", "tool_result", "response", "loop"]
     match: Match | None = None
@@ -158,6 +193,8 @@ class Policy(StrictModel):
     otherwise: Literal["ALLOW", "DENY", "REQUIRE_APPROVAL"] = "DENY"
     transform: list[Transform] = Field(default_factory=list)
     approval: Approval | None = None
+    cost_limit: CostLimit | None = None
+    rate_limit: RateLimit | None = None
 
 
 class Agent(StrictModel):

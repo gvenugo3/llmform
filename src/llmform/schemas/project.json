@@ -124,6 +124,39 @@
       "title": "Audit",
       "type": "object"
     },
+    "CostLimit": {
+      "additionalProperties": false,
+      "properties": {
+        "max_cost_usd": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Cost Usd"
+        },
+        "max_tokens": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Tokens"
+        }
+      },
+      "title": "CostLimit",
+      "type": "object"
+    },
     "HttpAuth": {
       "additionalProperties": false,
       "properties": {
@@ -497,6 +530,17 @@
           ],
           "default": null
         },
+        "cost_limit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CostLimit"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "match": {
           "anyOf": [
             {
@@ -529,6 +573,17 @@
           ],
           "title": "Otherwise",
           "type": "string"
+        },
+        "rate_limit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RateLimit"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "rule": {
           "anyOf": [
@@ -620,6 +675,33 @@
         "type"
       ],
       "title": "Provider",
+      "type": "object"
+    },
+    "RateLimit": {
+      "additionalProperties": false,
+      "properties": {
+        "max_calls": {
+          "exclusiveMinimum": 0,
+          "title": "Max Calls",
+          "type": "integer"
+        },
+        "window": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Window"
+        }
+      },
+      "required": [
+        "max_calls"
+      ],
+      "title": "RateLimit",
       "type": "object"
     },
     "Tool": {

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -32,6 +34,18 @@ class PolicyEngine:
         self.config = document.config
         self.evaluate = evaluate
         self.stage = stage
+        self._call_history: dict[str, list[float]] = {}
+
+    @staticmethod
+    def _parse_window(window: str | None) -> float | None:
+        if not window:
+            return None
+        match = re.fullmatch(r"(\d+)(s|m|h)", window.strip())
+        if not match:
+            return None
+        val, unit = int(match.group(1)), match.group(2)
+        multipliers = {"s": 1.0, "m": 60.0, "h": 3600.0}
+        return val * multipliers[unit]
 
     def dispatch(
         self,
@@ -53,6 +67,26 @@ class PolicyEngine:
             if policy.on != hook.value or not self._matches(policy.match, context):
                 continue
             applied.append(name)
+
+            # Enforce cost limit if declared
+            if policy.cost_limit is not None and policy.cost_limit.max_cost_usd is not None:
+                run_info = context.get("run") if isinstance(context.get("run"), Mapping) else {}
+                current_cost = run_info.get("cost_usd", context.get("cost_usd", 0.0))
+                if current_cost >= policy.cost_limit.max_cost_usd:
+                    return DispatchResult(Verdict(policy.otherwise), payload, tuple(applied))
+
+            # Enforce rate limit if declared
+            if policy.rate_limit is not None:
+                now = time.monotonic()
+                history = self._call_history.setdefault(name, [])
+                window_s = self._parse_window(policy.rate_limit.window)
+                if window_s is not None:
+                    history = [t for t in history if now - t <= window_s]
+                    self._call_history[name] = history
+                if len(history) >= policy.rate_limit.max_calls:
+                    return DispatchResult(Verdict(policy.otherwise), payload, tuple(applied))
+                history.append(now)
+
             if policy.rule is None or self.evaluate(policy.rule, context):
                 staged.extend(stage(transform) for transform in policy.transform)
                 continue
@@ -101,6 +135,13 @@ class PolicyEngine:
         model_context["model"] = model
         model_context["messages"] = [message.model_dump(mode="json") for message in state.messages]
         model_context["data"] = {"classes": list(state.classes)}
+        model_context["run"] = {
+            "id": state.run_id,
+            "iteration": state.iteration,
+            "cost_usd": state.cost_usd,
+            "principal": state.principal.model_dump(),
+            "call_count": len(state.messages),
+        }
         return self.dispatch(
             agent_name, Hook.MODEL_CALL, payload, model_context, stage=stage, approved=approved
         )
