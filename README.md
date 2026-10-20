@@ -21,6 +21,10 @@ The implementation uses Python 3.12 or newer. v0.1 provides an offline-first wor
 - `run <agent>` for local execution, including input flags/files/stdin, a local principal,
   interactive approvals, `--json`, and `--trust-sources` for reviewed MCP commands.
 
+The v0.2 `plan` command compares the working configuration with a committed, locked Git
+baseline, classifies privilege changes, and reports declared model-price impact. Use
+`--from <git-ref>` to select the baseline or `--fail-on-privilege` as a CI check.
+
 The accepted [v0.1 specification](docs/SPEC.md) is normative; the other design documents
 are retained as explicitly labeled historical context.
 

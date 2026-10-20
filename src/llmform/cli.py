@@ -18,6 +18,7 @@ from llmform.config.semantic import validate_semantics
 from llmform.config.validate import validate_references
 from llmform.diagnostics import Diagnostic, Position, Severity, exit_code, render_all, render_json
 from llmform.lock import LOCK_NAME, diff_lock, write_lock
+from llmform.plan import PlanError, build_plan, project_at_ref
 from llmform.policy.cel.compiler import validate_policy_rules
 from llmform.policy.cel.environment import validate_schema_profiles
 from llmform.providers import ProviderError
@@ -194,6 +195,86 @@ def lock(
         typer.echo(render_all(diagnostics, document.root))
     if code := exit_code(diagnostics):
         raise typer.Exit(code)
+
+
+@app.command()
+def plan(
+    path: Annotated[Path | None, typer.Argument(help="Project file or directory")] = None,
+    from_ref: Annotated[
+        str, typer.Option("--from", help="Git ref containing the baseline configuration")
+    ] = "HEAD",
+    fail_on_privilege: Annotated[
+        bool, typer.Option("--fail-on-privilege", help="Exit non-zero for privilege changes")
+    ] = False,
+    json_output: Annotated[bool, typer.Option("--json", help="Emit a JSON plan")] = False,
+    variable: Annotated[list[str] | None, typer.Option("--var", help="Set NAME=VALUE")] = None,
+) -> None:
+    """Compare this project with its locked configuration at a Git ref."""
+
+    current = load_project(path or Path.cwd())
+    diagnostics, scrubber = _check_project(current, variable)
+    if _has_error(diagnostics):
+        if scrubber:
+            diagnostics = _scrub_diagnostics(diagnostics, scrubber)
+        typer.echo(render_all(diagnostics, current.root), err=True)
+        raise typer.Exit(exit_code(diagnostics) or 1)
+
+    try:
+        with project_at_ref(current.root, from_ref) as baseline_root:
+            baseline = load_project(baseline_root)
+            baseline_diagnostics, baseline_scrubber = _check_project(baseline, variable)
+            if _has_error(baseline_diagnostics):
+                if baseline_scrubber:
+                    baseline_diagnostics = _scrub_diagnostics(
+                        baseline_diagnostics, baseline_scrubber
+                    )
+                typer.echo(render_all(baseline_diagnostics, baseline.root), err=True)
+                raise typer.Exit(exit_code(baseline_diagnostics) or 1)
+            try:
+                stale_sections = diff_lock(baseline)
+            except (OSError, ValueError) as exc:
+                raise PlanError(f"baseline {LOCK_NAME} cannot be verified: {exc}") from exc
+            if stale_sections:
+                raise PlanError(
+                    f"baseline {LOCK_NAME} is out of date "
+                    f"(changed sections: {', '.join(stale_sections)})"
+                )
+            result = build_plan(baseline, current)
+    except PlanError as exc:
+        typer.echo(f"Cannot create plan: {exc}", err=True)
+        raise typer.Exit(1) from None
+
+    summary = result["summary"]
+    assert isinstance(summary, dict)
+    if json_output:
+        typer.echo(json.dumps(result, indent=2, sort_keys=True))
+    else:
+        if not result["changes"]:
+            typer.echo(f"No changes from {from_ref}.")
+        else:
+            typer.echo(
+                f"Plan from {from_ref}: {summary['changes']} change(s), "
+                f"{summary['privilege_changes']} privilege, "
+                f"{summary['behavioral_changes']} behavioral, "
+                f"{summary['cosmetic_changes']} cosmetic"
+            )
+            typer.echo("Changes:")
+            for change in result["changes"]:
+                assert isinstance(change, dict)
+                typer.echo(
+                    f"- {change['classification'].upper()} {change['action']} {change['path']}"
+                )
+        cost_impact = result["cost_impact"]
+        assert isinstance(cost_impact, list)
+        typer.echo("Declared cost impact:")
+        if cost_impact:
+            for line in cost_impact:
+                typer.echo(f"- {line}")
+        else:
+            typer.echo("- none")
+
+    if fail_on_privilege and summary["privilege_changes"]:
+        raise typer.Exit(1)
 
 
 @app.command()

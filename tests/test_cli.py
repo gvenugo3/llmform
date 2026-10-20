@@ -1,4 +1,5 @@
 import json
+import subprocess
 from pathlib import Path
 from time import perf_counter
 
@@ -127,6 +128,151 @@ def test_lock_command_resolves_declared_cli_variables(tmp_path: Path) -> None:
 
     assert result.exit_code == 0, result.output
     assert (tmp_path / "llmform.lock").is_file()
+
+
+def _commit_plan_baseline(project: Path, config: str = VALID) -> None:
+    write_config(project, config)
+    (project / "prompts").mkdir()
+    (project / "prompts" / "support.md").write_text("Support", encoding="utf-8")
+    locked = runner.invoke(app, ["lock", str(project)])
+    assert locked.exit_code == 0, locked.output
+    for arguments in (
+        ["init", "--quiet"],
+        ["config", "user.email", "llmform-tests@example.test"],
+        ["config", "user.name", "llmform tests"],
+        ["add", "--all"],
+        ["commit", "--quiet", "-m", "baseline"],
+    ):
+        subprocess.run(
+            ["git", *arguments],
+            cwd=project,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+
+def test_plan_reports_noop_against_locked_head(tmp_path: Path) -> None:
+    _commit_plan_baseline(tmp_path)
+
+    result = runner.invoke(app, ["plan", str(tmp_path)])
+
+    assert result.exit_code == 0, result.output
+    assert "No changes from HEAD." in result.output
+    assert "Declared cost impact:\n- none" in result.output
+
+
+def test_plan_classifies_format_only_changes_as_cosmetic(tmp_path: Path) -> None:
+    _commit_plan_baseline(tmp_path)
+    (tmp_path / "llmform.yaml").write_text(VALID + "# formatting-only change\n", encoding="utf-8")
+
+    result = runner.invoke(app, ["plan", str(tmp_path), "--json", "--fail-on-privilege"])
+
+    payload = json.loads(result.output)
+    assert result.exit_code == 0
+    assert payload["summary"]["cosmetic_changes"] == 1
+    assert payload["changes"][0]["classification"] == "cosmetic"
+
+
+def test_plan_reports_an_invalid_baseline_ref(tmp_path: Path) -> None:
+    _commit_plan_baseline(tmp_path)
+
+    result = runner.invoke(app, ["plan", str(tmp_path), "--from", "not-a-ref"])
+
+    assert result.exit_code == 1
+    assert "baseline Git ref 'not-a-ref' is not valid or unavailable" in result.output
+
+
+def test_plan_flags_granted_tool_as_privilege_change(tmp_path: Path) -> None:
+    _commit_plan_baseline(tmp_path)
+    config = VALID.replace(
+        "policies:\n",
+        "  write:\n"
+        "    source: source.api\n"
+        "    operation: search\n"
+        "    description: Write\n"
+        "    input: schemas/input.json\n"
+        "policies:\n",
+    )
+    config = config.replace("    tools: [tool.search]", "    tools: [tool.search, tool.write]")
+    (tmp_path / "llmform.yaml").write_text(config, encoding="utf-8")
+
+    result = runner.invoke(app, ["plan", str(tmp_path), "--fail-on-privilege"])
+
+    assert result.exit_code == 1
+    assert "PRIVILEGE added agents.support.tools[tool.write]" in result.output
+    assert "1 privilege" in result.output
+
+
+def test_plan_reports_declared_price_delta_in_json(tmp_path: Path) -> None:
+    baseline = VALID.replace(
+        "    id: llama3.2\n",
+        "    id: llama3.2\n    price: {input_per_mtok: 1.25, output_per_mtok: 5.0}\n",
+    )
+    _commit_plan_baseline(tmp_path, baseline)
+    config = baseline.replace("input_per_mtok: 1.25", "input_per_mtok: 2.5")
+    (tmp_path / "llmform.yaml").write_text(config, encoding="utf-8")
+
+    result = runner.invoke(app, ["plan", str(tmp_path), "--json", "--fail-on-privilege"])
+
+    payload = json.loads(result.output)
+    assert result.exit_code == 1
+    assert payload["summary"]["privilege_changes"] == 1
+    assert payload["cost_impact"] == [
+        "model.default input: USD 1.25 -> 2.5 per million tokens (+1.25)"
+    ]
+
+
+def test_plan_does_not_fail_for_a_declared_price_reduction(tmp_path: Path) -> None:
+    baseline = VALID.replace(
+        "    id: llama3.2\n",
+        "    id: llama3.2\n    price: {input_per_mtok: 1.25, output_per_mtok: 5.0}\n",
+    )
+    _commit_plan_baseline(tmp_path, baseline)
+    config = baseline.replace("input_per_mtok: 1.25", "input_per_mtok: 0.5")
+    (tmp_path / "llmform.yaml").write_text(config, encoding="utf-8")
+
+    result = runner.invoke(app, ["plan", str(tmp_path), "--json", "--fail-on-privilege"])
+
+    payload = json.loads(result.output)
+    assert result.exit_code == 0
+    assert payload["summary"]["privilege_changes"] == 0
+    assert payload["summary"]["behavioral_changes"] == 1
+
+
+def test_plan_reports_increased_run_budget(tmp_path: Path) -> None:
+    baseline = VALID.replace(
+        "    id: llama3.2\n",
+        "    id: llama3.2\n    price: {input_per_mtok: 1.25, output_per_mtok: 5.0}\n",
+    ).replace("    tools: [tool.search]\n", "    tools: [tool.search]\n    max_cost_usd: 0.5\n")
+    _commit_plan_baseline(tmp_path, baseline)
+    config = baseline.replace("max_cost_usd: 0.5", "max_cost_usd: 1.0")
+    (tmp_path / "llmform.yaml").write_text(config, encoding="utf-8")
+
+    result = runner.invoke(app, ["plan", str(tmp_path), "--fail-on-privilege"])
+
+    assert result.exit_code == 1
+    assert "PRIVILEGE changed agents.support.max_cost_usd" in result.output
+    assert "agent.support max_cost_usd: $0.5 -> $1 per run" in result.output
+
+
+def test_plan_never_renders_resolved_secret_values(tmp_path: Path, monkeypatch) -> None:
+    baseline = VALID.replace(
+        "    type: ollama\n    endpoint: http://localhost:11434",
+        "    type: openai\n    api_key: ${secret.LLMFORM_PLAN_KEY_OLD}",
+    )
+    monkeypatch.setenv("LLMFORM_PLAN_KEY_OLD", "old-secret-value")
+    monkeypatch.setenv("LLMFORM_PLAN_KEY_NEW", "new-secret-value")
+    _commit_plan_baseline(tmp_path, baseline)
+    current = baseline.replace("secret.LLMFORM_PLAN_KEY_OLD", "secret.LLMFORM_PLAN_KEY_NEW")
+    (tmp_path / "llmform.yaml").write_text(current, encoding="utf-8")
+
+    result = runner.invoke(app, ["plan", str(tmp_path)])
+
+    assert result.exit_code == 0, result.output
+    assert "PRIVILEGE changed providers.local.api_key" in result.output
+    assert "old-secret-value" not in result.output
+    assert "new-secret-value" not in result.output
 
 
 def test_init_creates_a_valid_locked_project(tmp_path: Path) -> None:
