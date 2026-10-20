@@ -1,9 +1,18 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationInfo, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PrivateAttr,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 from llmform.diagnostics import Position
 
@@ -120,7 +129,60 @@ class McpSource(StrictModel):
     operations: dict[str, McpOperation]
 
 
-Source = Annotated[HttpSource | McpSource, Field(discriminator="type")]
+class PostgresOperation(StrictModel):
+    query: str
+    params: dict[str, OperationParameter] = Field(default_factory=dict)
+    returns: str
+    classes: list[str] = Field(default_factory=list)
+    read_only: bool = True
+
+    @field_validator("query")
+    @classmethod
+    def _validate_query(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Postgres operation query must not be empty")
+        return v
+
+    @model_validator(mode="after")
+    def _validate_operation(self) -> PostgresOperation:
+        if self.read_only:
+            first_word = self.query.strip().split()[0].upper() if self.query.strip() else ""
+            if first_word not in {"SELECT", "WITH", "EXPLAIN", "SHOW"}:
+                raise ValueError(
+                    f"Read-only Postgres query cannot start with {first_word!r}; "
+                    "must be a SELECT or WITH statement"
+                )
+        placeholders = set(re.findall(r"(?<!:):([a-zA-Z_][a-zA-Z0-9_]*)", self.query))
+        placeholders.update(re.findall(r"%\(([a-zA-Z_][a-zA-Z0-9_]*)\)s", self.query))
+        for p in placeholders:
+            if p not in self.params:
+                raise ValueError(f"query parameter '{p}' is not declared in operation params")
+        return self
+
+
+class PostgresSource(StrictModel):
+    type: Literal["postgres"]
+    dsn: str | None = None
+    host: str | None = None
+    port: int | None = 5432
+    database: str | None = None
+    user: str | None = None
+    password: str | None = None
+    sslmode: Literal["disable", "allow", "prefer", "require", "verify-ca", "verify-full"] | None = (
+        None
+    )
+    operations: dict[str, PostgresOperation]
+
+    @model_validator(mode="after")
+    def _validate_connection(self) -> PostgresSource:
+        if not self.dsn and not self.database:
+            raise ValueError("Postgres source requires either 'dsn' or 'database'")
+        if self.port is not None and not (1 <= self.port <= 65535):
+            raise ValueError("Postgres port must be between 1 and 65535")
+        return self
+
+
+Source = Annotated[HttpSource | McpSource | PostgresSource, Field(discriminator="type")]
 
 
 class Tool(StrictModel):

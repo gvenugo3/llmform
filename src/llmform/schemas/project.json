@@ -556,6 +556,159 @@
       "title": "Policy",
       "type": "object"
     },
+    "PostgresOperation": {
+      "additionalProperties": false,
+      "properties": {
+        "classes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Classes",
+          "type": "array"
+        },
+        "params": {
+          "additionalProperties": {
+            "$ref": "#/$defs/OperationParameter"
+          },
+          "title": "Params",
+          "type": "object"
+        },
+        "query": {
+          "title": "Query",
+          "type": "string"
+        },
+        "read_only": {
+          "default": true,
+          "title": "Read Only",
+          "type": "boolean"
+        },
+        "returns": {
+          "title": "Returns",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query",
+        "returns"
+      ],
+      "title": "PostgresOperation",
+      "type": "object"
+    },
+    "PostgresSource": {
+      "additionalProperties": false,
+      "properties": {
+        "database": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Database"
+        },
+        "dsn": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dsn"
+        },
+        "host": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Host"
+        },
+        "operations": {
+          "additionalProperties": {
+            "$ref": "#/$defs/PostgresOperation"
+          },
+          "title": "Operations",
+          "type": "object"
+        },
+        "password": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Password"
+        },
+        "port": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 5432,
+          "title": "Port"
+        },
+        "sslmode": {
+          "anyOf": [
+            {
+              "enum": [
+                "disable",
+                "allow",
+                "prefer",
+                "require",
+                "verify-ca",
+                "verify-full"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sslmode"
+        },
+        "type": {
+          "const": "postgres",
+          "title": "Type",
+          "type": "string"
+        },
+        "user": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "User"
+        }
+      },
+      "required": [
+        "type",
+        "operations"
+      ],
+      "title": "PostgresSource",
+      "type": "object"
+    },
     "Price": {
       "additionalProperties": false,
       "properties": {
@@ -804,7 +957,8 @@
         "discriminator": {
           "mapping": {
             "http": "#/$defs/HttpSource",
-            "mcp": "#/$defs/McpSource"
+            "mcp": "#/$defs/McpSource",
+            "postgres": "#/$defs/PostgresSource"
           },
           "propertyName": "type"
         },
@@ -814,6 +968,9 @@
           },
           {
             "$ref": "#/$defs/McpSource"
+          },
+          {
+            "$ref": "#/$defs/PostgresSource"
           }
         ]
       },

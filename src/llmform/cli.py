@@ -25,6 +25,7 @@ from llmform.providers.http import OllamaProvider, OpenAIProvider
 from llmform.runtime import Loop
 from llmform.sources.http import HttpOperationSource
 from llmform.sources.mcp import McpSource
+from llmform.sources.postgres import PostgresOperationSource
 from llmform.types import Principal
 
 app = typer.Typer(no_args_is_help=True, pretty_exceptions_enable=False)
@@ -262,6 +263,8 @@ def run(
     for name, source in document.config.sources.items():
         if source.type == "http":
             sources[name] = HttpOperationSource(source, schemas)
+        elif source.type == "postgres":
+            sources[name] = PostgresOperationSource(source, schemas)
         else:
             sources[name] = McpSource(source.command, trusted=trust_sources)
     loop = Loop(document, provider, sources, audit_path=document.root / "llmform.audit.jsonl")
