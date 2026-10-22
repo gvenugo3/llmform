@@ -369,6 +369,13 @@ class Loop:
                 "source": tool.source.removeprefix("source."),
                 "operation": tool.operation,
                 "principal": state.principal.model_dump(),
+                "run": {
+                    "id": state.run_id,
+                    "iteration": state.iteration,
+                    "cost_usd": state.cost_usd,
+                    "principal": state.principal.model_dump(),
+                    "call_count": len(state.messages),
+                },
             }
             for attempt in range(tool.retries + 1):
                 admitted = self.engine.dispatch(

@@ -233,8 +233,13 @@ def validate_semantics(document: ConfigDocument) -> list[Diagnostic]:  # noqa: C
         cost_required = agent.max_cost_usd is not None
         for policy_reference in agent.policies:
             policy = config.policies.get(_name(policy_reference, "policy"))
-            if policy is not None and policy.rule:
-                cost_required = cost_required or "cost_usd" in expression_identifiers(policy.rule)
+            if policy is not None:
+                if policy.cost_limit is not None and policy.cost_limit.max_cost_usd is not None:
+                    cost_required = True
+                if policy.rule:
+                    cost_required = cost_required or "cost_usd" in expression_identifiers(
+                        policy.rule
+                    )
         if not cost_required:
             continue
         model_name = _name(agent.model, "model")

@@ -133,3 +133,85 @@ def test_tool_result_classes_are_monotonic(tmp_path) -> None:
     admitted = engine.admit_tool_result(state, "search")
 
     assert admitted.classes == ["restricted", "pii"]
+
+
+def test_policy_cost_limit_enforcement(tmp_path) -> None:
+    config = VALID.replace(
+        '  safe:\n    on: tool_call\n    rule: "true"',
+        "  safe:\n"
+        "    on: tool_call\n"
+        "    cost_limit:\n"
+        "      max_cost_usd: 0.50\n"
+        "    otherwise: DENY",
+    )
+    write_config(tmp_path, config)
+    engine = PolicyEngine(
+        load_project(tmp_path),
+        lambda _rule, _context: True,
+        lambda _transform: lambda payload: payload,
+    )
+
+    # Under budget
+    res_under = engine.dispatch("support", Hook.TOOL_CALL, {}, {"cost_usd": 0.25})
+    assert res_under.verdict != Verdict.DENY
+
+    # At or over budget
+    res_over = engine.dispatch("support", Hook.TOOL_CALL, {}, {"cost_usd": 0.50})
+    assert res_over.verdict == Verdict.DENY
+    assert res_over.policies == ("safe",)
+
+
+def test_policy_rate_limit_enforcement(tmp_path, monkeypatch) -> None:
+    config = VALID.replace(
+        '  safe:\n    on: tool_call\n    rule: "true"',
+        "  safe:\n"
+        "    on: tool_call\n"
+        "    rate_limit:\n"
+        "      max_calls: 2\n"
+        "      window: 10s\n"
+        "    otherwise: DENY",
+    )
+    write_config(tmp_path, config)
+    engine = PolicyEngine(
+        load_project(tmp_path),
+        lambda _rule, _context: True,
+        lambda _transform: lambda payload: payload,
+    )
+
+    fake_time = 1000.0
+    monkeypatch.setattr("time.monotonic", lambda: fake_time)
+
+    # Call 1: Allowed
+    r1 = engine.dispatch("support", Hook.TOOL_CALL, {}, {})
+    assert r1.verdict != Verdict.DENY
+
+    # Call 2: Allowed
+    r2 = engine.dispatch("support", Hook.TOOL_CALL, {}, {})
+    assert r2.verdict != Verdict.DENY
+
+    # Call 3: Exceeded within 10s window -> DENY
+    r3 = engine.dispatch("support", Hook.TOOL_CALL, {}, {})
+    assert r3.verdict == Verdict.DENY
+    assert r3.policies == ("safe",)
+
+    # Advance time past 10s window: Allowed again
+    fake_time = 1015.0
+    r4 = engine.dispatch("support", Hook.TOOL_CALL, {}, {})
+    assert r4.verdict != Verdict.DENY
+
+
+def test_malformed_limits_validation() -> None:
+    import pytest
+    from pydantic import ValidationError
+
+    from llmform.config.models import CostLimit, RateLimit
+
+    # Invalid rate limit window
+    with pytest.raises(ValidationError, match="malformed rate limit window"):
+        RateLimit(max_calls=5, window="not-a-duration")
+
+    # Invalid cost limit without tokens or usd
+    with pytest.raises(
+        ValidationError, match="requires at least one of max_cost_usd or max_tokens"
+    ):
+        CostLimit()
