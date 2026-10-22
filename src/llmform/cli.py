@@ -20,9 +20,11 @@ from llmform.diagnostics import Diagnostic, Position, Severity, exit_code, rende
 from llmform.lock import LOCK_NAME, diff_lock, write_lock
 from llmform.policy.cel.compiler import validate_policy_rules
 from llmform.policy.cel.environment import validate_schema_profiles
-from llmform.providers import ProviderError
+from llmform.providers import Provider, ProviderError
 from llmform.providers.http import OllamaProvider, OpenAIProvider
 from llmform.runtime import Loop
+from llmform.server import Authenticator, LlmformServer, ProviderRouter
+from llmform.sources import Source
 from llmform.sources.http import HttpOperationSource
 from llmform.sources.mcp import McpSource
 from llmform.types import Principal
@@ -196,6 +198,62 @@ def lock(
         raise typer.Exit(code)
 
 
+def _build_runtime(
+    document: ConfigDocument,
+    trust_sources: bool = False,
+) -> tuple[Provider, dict[str, Source]]:
+    if document.config is None:
+        raise ValueError("Project configuration is missing")
+    schemas: dict[str, dict] = {}
+    for source in document.config.sources.values():
+        for operation in source.operations.values():
+            schemas[operation.returns] = json.loads((document.root / operation.returns).read_text())
+    sources: dict[str, Source] = {}
+    mcp_sources = [source for source in document.config.sources.values() if source.type == "mcp"]
+    if mcp_sources:
+        try:
+            lock_changed = "sources" in diff_lock(document)
+        except (OSError, ValueError):
+            lock_changed = True
+        if lock_changed and not trust_sources:
+            raise typer.BadParameter(
+                "MCP argv is not recorded in llmform.lock; review it and use --trust-sources"
+            )
+        if lock_changed:
+            write_lock(document)
+    for name, source in document.config.sources.items():
+        if source.type == "http":
+            sources[name] = HttpOperationSource(source, schemas)
+        else:
+            sources[name] = McpSource(source.command, trusted=trust_sources)
+
+    providers: dict[str, Provider] = {}
+    for prov_name, provider_config in document.config.providers.items():
+        if provider_config.type == "openai":
+            if not provider_config.api_key:
+                raise typer.BadParameter(f"OpenAI provider {prov_name!r} requires api_key")
+            providers[prov_name] = OpenAIProvider(
+                provider_config.api_key,
+                provider_config.endpoint or "https://api.openai.com/v1/responses",
+            )
+        else:
+            providers[prov_name] = OllamaProvider(
+                provider_config.endpoint or "http://localhost:11434/api/chat"
+            )
+    model_to_prov: dict[str, str] = {}
+    for model_name, model_cfg in document.config.models.items():
+        prov_target = model_cfg.provider.removeprefix("provider.")
+        model_to_prov[model_cfg.id] = prov_target
+        model_to_prov[model_name] = prov_target
+
+    if len(providers) == 1:
+        provider: Provider = next(iter(providers.values()))
+    else:
+        provider = ProviderRouter(providers, model_to_prov)
+
+    return provider, sources
+
+
 @app.command()
 def run(
     agent: Annotated[str, typer.Argument(help="Agent name")],
@@ -231,39 +289,7 @@ def run(
         if principal
         else Principal(id="developer", role="developer")
     )
-    model = document.config.models[document.config.agents[agent_name].model.removeprefix("model.")]
-    provider_config = document.config.providers[model.provider.removeprefix("provider.")]
-    if provider_config.type == "openai":
-        if not provider_config.api_key:
-            raise typer.BadParameter("OpenAI provider requires api_key")
-        provider = OpenAIProvider(
-            provider_config.api_key,
-            provider_config.endpoint or "https://api.openai.com/v1/responses",
-        )
-    else:
-        provider = OllamaProvider(provider_config.endpoint or "http://localhost:11434/api/chat")
-    schemas: dict[str, dict] = {}
-    for source in document.config.sources.values():
-        for operation in source.operations.values():
-            schemas[operation.returns] = json.loads((document.root / operation.returns).read_text())
-    sources = {}
-    mcp_sources = [source for source in document.config.sources.values() if source.type == "mcp"]
-    if mcp_sources:
-        try:
-            lock_changed = "sources" in diff_lock(document)
-        except (OSError, ValueError):
-            lock_changed = True
-        if lock_changed and not trust_sources:
-            raise typer.BadParameter(
-                "MCP argv is not recorded in llmform.lock; review it and use --trust-sources"
-            )
-        if lock_changed:
-            write_lock(document)
-    for name, source in document.config.sources.items():
-        if source.type == "http":
-            sources[name] = HttpOperationSource(source, schemas)
-        else:
-            sources[name] = McpSource(source.command, trusted=trust_sources)
+    provider, sources = _build_runtime(document, trust_sources=trust_sources)
     loop = Loop(document, provider, sources, audit_path=document.root / "llmform.audit.jsonl")
     try:
         state = loop.start(agent_name, actor, text)
@@ -358,3 +384,61 @@ def validate(
     typer.echo(output)
     if code := exit_code(diagnostics):
         raise typer.Exit(code)
+
+
+@app.command()
+def serve(
+    path: Annotated[Path | None, typer.Option("--path", help="Project file or directory")] = None,
+    host: Annotated[str, typer.Option("--host", help="Bind host address")] = "127.0.0.1",
+    port: Annotated[int, typer.Option("--port", help="Bind port number")] = 8000,
+    auth_token: Annotated[
+        list[str] | None,
+        typer.Option("--auth-token", help="Token mapping in format token=role[:id[:tenant]]"),
+    ] = None,
+    token_file: Annotated[
+        Path | None,
+        typer.Option("--token-file", help="JSON file containing token to principal mapping"),
+    ] = None,
+    insecure_dev: Annotated[
+        bool,
+        typer.Option(
+            "--insecure-dev",
+            help="Allow unauthenticated requests with default developer principal",
+        ),
+    ] = False,
+    trust_sources: Annotated[bool, typer.Option("--trust-sources")] = False,
+    variable: Annotated[list[str] | None, typer.Option("--var", help="Set NAME=VALUE")] = None,
+) -> None:
+    """Start an HTTP service over configured agents."""
+    document = load_project(path or Path.cwd())
+    diagnostics, scrubber = _check_project(document, variable)
+    if document.config is None or _has_error(diagnostics):
+        diagnostics = _scrub_diagnostics(diagnostics, scrubber) if scrubber else diagnostics
+        typer.echo(render_all(diagnostics, document.root), err=True)
+        raise typer.Exit(1)
+
+    provider, sources = _build_runtime(document, trust_sources=trust_sources)
+    loop = Loop(document, provider, sources, audit_path=document.root / "llmform.audit.jsonl")
+
+    token_map: dict[str, Principal] = {}
+    if token_file and token_file.is_file():
+        data = json.loads(token_file.read_text(encoding="utf-8"))
+        for tok, p_data in data.items():
+            token_map[tok] = Principal.model_validate(p_data)
+    if auth_token:
+        for item in auth_token:
+            if "=" in item:
+                tok, spec = item.split("=", 1)
+                subparts = spec.split(":")
+                role = subparts[0]
+                uid = subparts[1] if len(subparts) > 1 else ""
+                tenant = subparts[2] if len(subparts) > 2 else ""
+                token_map[tok] = Principal(id=uid, role=role, tenant=tenant)
+
+    authenticator = Authenticator(token_map, insecure_dev=insecure_dev)
+    server = LlmformServer((host, port), document, loop, authenticator=authenticator)
+    typer.echo(f"Serving llmform API on http://{host}:{port}")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        server.shutdown()

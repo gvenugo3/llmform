@@ -195,15 +195,27 @@ class Loop:
                     fields=transform.fields,
                 )
 
-    def step(self, state: RunState, *, approved: bool | None = None) -> RunState:
+    def step(
+        self,
+        state: RunState,
+        *,
+        approved: bool | None = None,
+        approver: Principal | None = None,
+    ) -> RunState:
         try:
-            result = self._step(state, approved=approved)
+            result = self._step(state, approved=approved, approver=approver)
         except TransformError as exc:
             failed = {"status": "failed", "failure": f"transform failed: {exc}"}
             result = state.model_copy(update=failed)
         return self._finish(result)
 
-    def _step(self, state: RunState, *, approved: bool | None = None) -> RunState:  # noqa: C901
+    def _step(
+        self,
+        state: RunState,
+        *,
+        approved: bool | None = None,
+        approver: Principal | None = None,
+    ) -> RunState:  # noqa: C901
         if state.status not in {"running", "suspended"}:
             return state
         from llmform.lock import build_lock
@@ -218,9 +230,10 @@ class Loop:
         approved_policy: str | None = None
         if state.pending:
             pending = state.pending
+            acting_approver = approver or state.principal
             allowed = approved is True and cel(
                 pending.approvers,
-                {"principal": state.principal.model_dump(), "run": state.model_dump(mode="json")},
+                {"principal": acting_approver.model_dump(), "run": state.model_dump(mode="json")},
             )
             log = self._audit(state)
             log.append(
@@ -228,7 +241,7 @@ class Loop:
                 policy=pending.policy,
                 hook=pending.hook.value,
                 verdict="ALLOW" if allowed else "DENY",
-                principal=state.principal.model_dump(mode="json"),
+                principal=acting_approver.model_dump(mode="json"),
                 rule=pending.approvers,
                 answers_seq=state.audit_seq,
             )
