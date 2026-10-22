@@ -60,7 +60,7 @@ class Variable(StrictModel):
 
 
 class Provider(StrictModel):
-    type: Literal["openai", "ollama"]
+    type: Literal["openai", "ollama", "anthropic"]
     api_key: str | None = None
     endpoint: str | None = None
 

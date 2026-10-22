@@ -21,7 +21,7 @@ from llmform.lock import LOCK_NAME, diff_lock, write_lock
 from llmform.policy.cel.compiler import validate_policy_rules
 from llmform.policy.cel.environment import validate_schema_profiles
 from llmform.providers import ProviderError
-from llmform.providers.http import OllamaProvider, OpenAIProvider
+from llmform.providers.http import AnthropicProvider, OllamaProvider, OpenAIProvider
 from llmform.runtime import Loop
 from llmform.sources.http import HttpOperationSource
 from llmform.sources.mcp import McpSource
@@ -239,6 +239,13 @@ def run(
         provider = OpenAIProvider(
             provider_config.api_key,
             provider_config.endpoint or "https://api.openai.com/v1/responses",
+        )
+    elif provider_config.type == "anthropic":
+        if not provider_config.api_key:
+            raise typer.BadParameter("Anthropic provider requires api_key")
+        provider = AnthropicProvider(
+            provider_config.api_key,
+            provider_config.endpoint or "https://api.anthropic.com/v1/messages",
         )
     else:
         provider = OllamaProvider(provider_config.endpoint or "http://localhost:11434/api/chat")
