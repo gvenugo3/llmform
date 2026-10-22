@@ -16,7 +16,13 @@ from llmform.audit import AuditLog
 from llmform.config.loader import ConfigDocument
 from llmform.config.models import Agent, Transform
 from llmform.policy.engine import DispatchResult, PolicyEngine, TransformStager
-from llmform.policy.transforms import InMemoryTokenVault, Origin, TransformError, detokenize
+from llmform.policy.transforms import (
+    Origin,
+    PersistentEncryptedTokenVault,
+    TokenVault,
+    TransformError,
+    detokenize,
+)
 from llmform.policy.transforms import transform as apply_transform
 from llmform.providers import Provider, ToolDefinition
 from llmform.sources import Source
@@ -64,7 +70,7 @@ class Loop:
         sources: dict[str, Source],
         *,
         audit_path: Path | None = None,
-        vault: InMemoryTokenVault | None = None,
+        vault: TokenVault | None = None,
     ):
         if document.config is None:
             raise ValueError("loop requires validated project")
@@ -76,7 +82,9 @@ class Loop:
         )
         self.audit_path = audit_path
         self.logs: dict[str, AuditLog] = {}
-        self.vault = vault or InMemoryTokenVault()
+        self.vault: TokenVault = vault or PersistentEncryptedTokenVault(
+            document.root / ".llmform" / "vault"
+        )
         self.engine = PolicyEngine(document, cel, _unbound_stage)
 
     def start(self, agent: str, principal: Principal, text: str) -> RunState:
@@ -103,7 +111,7 @@ class Loop:
                     "agent": {"name": state.agent},
                     "run": {"id": state.run_id, "iteration": 0, "cost_usd": 0.0},
                 },
-                stage=self._stager(state.run_id, Origin.REQUEST),
+                stage=self._stager(state.run_id, Origin.REQUEST, closure=state.closure),
             )
         except TransformError as exc:
             failed = {"status": "failed", "failure": f"transform failed: {exc}"}
@@ -115,20 +123,26 @@ class Loop:
         content = admitted["message"] if set(admitted) == {"message"} else json.dumps(admitted)
         return state.model_copy(update={"messages": [Message(role="user", content=content)]})
 
-    def _stager(self, run_id: str, origin: Origin) -> TransformStager:
+    def _stager(self, run_id: str, origin: Origin, closure: str = "") -> TransformStager:
         """Bind declared transforms to this run's vault and the payload's origin."""
 
         def stage(declared: Transform) -> Callable[[Any], Any]:
             def commit(payload: Any) -> Any:
                 return apply_transform(
-                    payload, declared.fields, declared.kind, self.vault, run_id, origin
+                    payload,
+                    declared.fields,
+                    declared.kind,
+                    self.vault,
+                    run_id,
+                    origin,
+                    closure=closure,
                 )
 
             return commit
 
         return stage
 
-    def _message_stager(self, run_id: str) -> TransformStager:
+    def _message_stager(self, run_id: str, closure: str = "") -> TransformStager:
         """Apply model_call transforms to each message bound for the provider."""
 
         def stage(declared: Transform) -> Callable[[Any], Any]:
@@ -141,6 +155,7 @@ class Loop:
                         self.vault,
                         run_id,
                         Origin.REQUEST if message.get("role") == "user" else Origin.TOOL_RESULT,
+                        closure=closure,
                     )
                     for message in messages
                 ]
@@ -258,7 +273,7 @@ class Loop:
                 "cost_usd": state.cost_usd,
                 "principal": state.principal.model_dump(),
             },
-            stage=self._stager(state.run_id, Origin.TOOL_RESULT),
+            stage=self._stager(state.run_id, Origin.TOOL_RESULT, closure=state.closure),
         )
         self._record_dispatch(state, Hook.LOOP, loop_result, {})
         if loop_result.verdict == Verdict.DENY:
@@ -277,7 +292,7 @@ class Loop:
             state,
             outbound,
             {"id": model.id, "provider": model.provider},
-            stage=self._message_stager(state.run_id),
+            stage=self._message_stager(state.run_id, closure=state.closure),
             approved=approved_policy,
         )
         self._record_dispatch(state, Hook.MODEL_CALL, call, outbound)
@@ -351,13 +366,18 @@ class Loop:
                 Hook.RESPONSE,
                 draft,
                 {"principal": state.principal.model_dump(), "draft": draft},
-                stage=self._stager(state.run_id, Origin.TOOL_RESULT),
+                stage=self._stager(state.run_id, Origin.TOOL_RESULT, closure=state.closure),
             )
             self._record_dispatch(state, Hook.RESPONSE, response, draft)
             if failure := _unsupported_block(response, "response"):
                 return state.model_copy(update={"status": "denied", "failure": failure})
             released = detokenize(
-                response.payload, list(response.payload), self.vault, state.run_id, caller=True
+                response.payload,
+                list(response.payload),
+                self.vault,
+                state.run_id,
+                caller=True,
+                closure=state.closure,
             )
             result = released if isinstance(result, dict) else released["text"]
             return state.model_copy(update={"status": "completed", "result": result})
@@ -376,7 +396,7 @@ class Loop:
                     Hook.TOOL_CALL,
                     call.arguments,
                     {**context, "args": call.arguments, "attempt": attempt},
-                    stage=self._stager(state.run_id, Origin.TOOL_RESULT),
+                    stage=self._stager(state.run_id, Origin.TOOL_RESULT, closure=state.closure),
                 )
                 self._record_dispatch(state, Hook.TOOL_CALL, admitted, call.arguments)
                 if admitted.verdict == Verdict.DENY:
@@ -389,7 +409,13 @@ class Loop:
                 if failure := _unsupported_block(admitted, "tool_call"):
                     return state.model_copy(update={"status": "denied", "failure": failure})
                 # Only the tool's declared detokenize fields see plaintext (SPEC 3.5.2).
-                arguments = detokenize(admitted.payload, tool.detokenize, self.vault, state.run_id)
+                arguments = detokenize(
+                    admitted.payload,
+                    tool.detokenize,
+                    self.vault,
+                    state.run_id,
+                    closure=state.closure,
+                )
                 try:
                     value = self.sources[tool.source.removeprefix("source.")].execute(
                         tool.operation, arguments, timeout=30
@@ -407,7 +433,7 @@ class Loop:
                     Hook.TOOL_RESULT,
                     value,
                     {**context, "result": value},
-                    stage=self._stager(state.run_id, Origin.TOOL_RESULT),
+                    stage=self._stager(state.run_id, Origin.TOOL_RESULT, closure=state.closure),
                 )
                 self._record_dispatch(state, Hook.TOOL_RESULT, checked, value)
                 if failure := _unsupported_block(checked, "tool_result"):

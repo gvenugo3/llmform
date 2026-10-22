@@ -10,7 +10,13 @@ from typer.testing import CliRunner
 
 from llmform.cli import app
 from llmform.config.loader import load_project
-from llmform.policy.transforms import TOKEN_PREFIX, InMemoryTokenVault, Origin
+from llmform.policy.transforms import (
+    TOKEN_PREFIX,
+    InMemoryTokenVault,
+    Origin,
+    PersistentEncryptedTokenVault,
+    TransformError,
+)
 from llmform.providers import Completion, Provider, ToolDefinition, Usage
 from llmform.runtime import Loop
 from llmform.sources import Source
@@ -272,3 +278,99 @@ class FinalAnswer(Provider):
         self.messages = list(messages)
         reply = Message(role="assistant", content=_user(messages).content)
         return Completion(message=reply, usage=Usage(input_tokens=1, output_tokens=1))
+
+
+def test_persistent_encrypted_token_vault_roundtrip_and_non_leakage(tmp_path: Path) -> None:
+    vault = PersistentEncryptedTokenVault(tmp_path / "vault", key="my-secret-vault-key-1234567890!")
+    secret_value = "SUPER_SECRET_SSN_987-65-4321"
+    run_id = "run-test-123"
+    closure = "sha256:closure_hash_abc"
+
+    token = vault.put(run_id, secret_value, Origin.REQUEST, closure=closure)
+    assert token.startswith(TOKEN_PREFIX)
+
+    # Resolve token
+    rec = vault.resolve(run_id, token, closure=closure)
+    assert rec is not None
+    assert rec.plaintext == secret_value
+    assert rec.origin == Origin.REQUEST
+
+    # Check persistence and non-leakage
+    vault_file = tmp_path / "vault" / f"{run_id}.vault"
+    assert vault_file.is_file()
+    encrypted_bytes = vault_file.read_bytes()
+
+    # Plaintext must NOT appear in the encrypted payload
+    assert secret_value.encode("utf-8") not in encrypted_bytes
+    assert b"SUPER_SECRET" not in encrypted_bytes
+
+    # Magic header LFV1 must be present
+    assert encrypted_bytes[:4] == b"LFV1"
+
+    # Purge removes file
+    vault.purge(run_id)
+    assert not vault_file.is_file()
+
+
+def test_persistent_encrypted_token_vault_closure_mismatch_refused(tmp_path: Path) -> None:
+    vault = PersistentEncryptedTokenVault(tmp_path / "vault", key="vault-key")
+    run_id = "run-closure-test"
+    token = vault.put(run_id, "data", Origin.REQUEST, closure="sha256:correct_hash")
+
+    # Accessing with mismatched closure must be refused
+    import pytest
+
+    with pytest.raises(TransformError, match="Closure mismatch"):
+        vault.resolve(run_id, token, closure="sha256:wrong_hash")
+
+
+def test_persistent_encrypted_token_vault_tampered_refused(tmp_path: Path) -> None:
+    vault = PersistentEncryptedTokenVault(tmp_path / "vault", key="vault-key")
+    run_id = "run-tamper-test"
+    token = vault.put(run_id, "data", Origin.REQUEST)
+
+    vault_file = tmp_path / "vault" / f"{run_id}.vault"
+    tampered = bytearray(vault_file.read_bytes())
+    # Tamper with a ciphertext byte
+    tampered[-1] ^= 0xFF
+    vault_file.write_bytes(tampered)
+
+    import pytest
+
+    with pytest.raises(TransformError, match="integrity check failed"):
+        vault.resolve(run_id, token)
+
+
+def test_suspended_run_resumes_across_process_restart_with_persistent_vault(tmp_path: Path) -> None:
+    config = CONFIG.replace(
+        "  pii:\n",
+        '  approve:\n    on: model_call\n    rule: "false"\n    otherwise: REQUIRE_APPROVAL\n'
+        "    approval: {approvers: 'principal.role == \"supervisor\"'}\n  pii:\n",
+    ).replace("[policy.ingress, policy.pii]", "[policy.ingress, policy.approve, policy.pii]")
+
+    project_dir = write_project(tmp_path, config)
+    doc1 = load_project(project_dir)
+
+    request = json.dumps({"account": ACCOUNT, "question": "What is on file?"})
+
+    # First loop runs and suspends on model_call
+    loop1 = Loop(doc1, ScriptedProvider(), {"crm": CrmSource()})
+    suspended = loop1.step(loop1.start("support", Principal(role="supervisor"), request))
+    assert suspended.status == "suspended"
+
+    # Save state to json as if serializing to store/disk
+    saved_state_json = suspended.model_dump_json()
+
+    # Second loop in fresh instance (simulating process restart)
+    doc2 = load_project(project_dir)
+    loop2 = Loop(doc2, ScriptedProvider(), {"crm": CrmSource()})
+    restored_state = RunState.model_validate_json(saved_state_json)
+
+    # Resume the suspended run
+    resumed = loop2.step(restored_state, approved=True)
+    while resumed.status in {"running", "suspended"}:
+        if resumed.status == "suspended":
+            resumed = loop2.step(resumed, approved=True)
+        else:
+            resumed = loop2.step(resumed)
+    assert resumed.status == "completed", resumed.failure
