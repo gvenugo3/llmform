@@ -719,18 +719,28 @@ Warnings alone exit zero; any error exits one.
 
 ### `plan`
 
-`llmform plan [--from <git-ref>]` — diffs the config closure between two revisions.
+`llmform plan [<path>] [--from <git-ref>] [--fail-on-privilege] [--json]` compares the
+working project with the locked configuration at a Git ref. `--from` defaults to `HEAD`;
+the baseline must contain a valid `llmform.lock`. The current project and baseline are
+validated offline. A no-op plan is distinct from a changed plan. JSON output is stable
+and omits resolved configuration values.
+
 Every change is classified:
 
-- **cosmetic** — descriptions, formatting
+- **cosmetic** — descriptions and formatting-only edits
 - **behavioural** — prompts, temperature, model swap within a provider
 - **privilege** — tool granted, policy detached or relaxed, approval requirement removed,
   `approvers` widened, `detokenize` field added, `default_tool_posture` flipped to
   `allow`, data class dropped from an operation, budget or price raised, provider changed,
-  MCP `command` altered
+  MCP `command` altered, tool operation or provider/source authorization boundary changed
 
-Privilege changes render as warnings and set a non-zero exit under
-`--fail-on-privilege`, which is the CI hook.
+Policy rule, match, approval, and transform edits are conservatively classified as
+privilege changes because their direction cannot be inferred from arbitrary CEL. Tool
+schema edits are also privilege changes for review. Declared price changes report input
+and output deltas per million tokens; `max_cost_usd` changes are per-run limits, and
+`max_tokens` changes report the declared output-cost ceiling when available. No usage
+estimate or currency conversion is inferred. `--fail-on-privilege` exits non-zero when
+any privilege change is present, providing the CI hook.
 
 ---
 
